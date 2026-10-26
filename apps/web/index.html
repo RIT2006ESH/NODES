@@ -1,0 +1,163 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="theme-color" content="#070a14" />
+    <title>Mumbai Network Garden</title>
+    <link rel="stylesheet" href="/src/style.css" />
+  </head>
+  <body>
+    <canvas id="board" aria-label="Simulated network board"></canvas>
+
+    <header id="hud">
+      <div class="brand">
+        <span class="brandGlyph" aria-hidden="true"><span></span></span>
+        <div class="brandCopy"><strong>Mumbai Network Garden</strong><em><span class="liveDot"></span> live simulated network</em></div>
+      </div>
+      <div class="hudLine" aria-hidden="true"></div>
+      <div class="metrics">
+        <div class="metric phaseMetric"><span class="metricLabel">phase</span><b id="phase">seeding</b><small id="countdown">—</small></div>
+        <div class="metric"><span class="metricLabel">last score</span><b id="score">—</b></div>
+        <div class="metric healthMetric"><span class="metricLabel">network health</span><b id="health">—</b><span class="healthTrack"><i></i></span></div>
+      </div>
+      <div class="tokens" id="tokens" title="Link tokens">
+        <span class="tokenLabel">LINK TOKENS</span>
+        <i></i><i></i><i></i>
+        <span id="tokenTimer"></span>
+      </div>
+    </header>
+
+    <div id="searchPanel" role="search">
+      <span class="searchGlyph" aria-hidden="true"></span>
+      <input
+        id="playerSearch"
+        type="search"
+        role="combobox"
+        aria-autocomplete="list"
+        aria-controls="searchResults"
+        aria-expanded="false"
+        placeholder="Search players or nodes..."
+        autocomplete="off"
+        spellcheck="false"
+      />
+      <button id="searchClear" type="button" aria-label="Clear search" hidden>×</button>
+      <div id="searchResults" role="listbox" aria-label="Search results" hidden></div>
+    </div>
+
+    <aside id="leaderboard" aria-label="Network and team leaderboard">
+      <button id="lbToggle" type="button" aria-expanded="true" aria-controls="lbBody">
+        <span class="lbMark" aria-hidden="true"></span>
+         <span class="lbTitle">Network rankings</span>
+        <span id="lbCount" class="lbCount">0 players</span>
+        <span class="lbChevron" aria-hidden="true"></span>
+      </button>
+      <div id="lbBody">
+        <section class="teamBoard" aria-labelledby="teamBoardTitle">
+          <div class="teamBoardHead"><b id="teamBoardTitle">TEAM LEADERBOARD</b><span><strong id="teamGroupCount">0</strong> active groups</span></div>
+          <div id="teamList" class="teamList"></div>
+        </section>
+        <p class="lbCaption">Repairs · active links · no separate team score</p>
+        <div class="lbColumns" aria-hidden="true">
+          <span>#</span><span>Player</span><span>Repairs</span><span>Links</span>
+        </div>
+        <ol id="lbList"></ol>
+      </div>
+    </aside>
+
+    <div class="worldTag"><span></span> SHARED WORLD <b id="worldCount">—</b></div>
+    <aside id="activityFeed" class="activityFeed" aria-label="Live network activity" aria-live="polite"><div class="activityTitle">LIVE ACTIVITY</div><div id="activityItems"></div></aside>
+    <div id="hint"><kbd>WASD</kbd> Move your node <span>·</span> Select a player to connect</div>
+    <div class="gameControls" aria-label="Game controls">
+      <button id="pingNetwork" class="pingNetwork" type="button">◌ PING NETWORK</button>
+      <button id="learnLibp2p" class="learnLink" type="button">◈ Learn libp2p</button>
+      <button id="findMe" type="button"><span aria-hidden="true">⌖</span> Find my node</button>
+    </div>
+    <aside id="pulseResult" class="pulseResult" hidden role="status" aria-live="polite"></aside>
+    <aside id="failurePreview" class="failurePreview" hidden role="status" aria-live="polite"></aside>
+    <aside id="packetMission" class="packetMission" hidden aria-live="polite"></aside>
+    <div id="packetDot" class="packetDot" hidden aria-hidden="true"></div>
+    <aside id="playerCard" class="playerCard" hidden aria-live="polite"></aside>
+    <section id="learnPanel" class="learnPanel" hidden role="dialog" aria-modal="true" aria-labelledby="learnTitle">
+      <button id="learnClose" class="panelClose" type="button" aria-label="Close technology guide">×</button>
+      <p class="eyebrow">Technical field guide</p>
+      <h2 id="learnTitle">UNDER THE HOOD — MUMBAI NETWORK GARDEN</h2>
+      <p class="learnIntro">This game lets you explore how connected networks work by building a simulated network with other players. Here is what powers the experience, and how it relates to real peer-to-peer networking.</p>
+
+      <div class="learnSections">
+        <section class="learnSection" aria-labelledby="gameSystemsTitle">
+          <div class="learnSectionHeading"><span class="learnSectionNumber">A</span><div><h3 id="gameSystemsTitle">How This Game Actually Works</h3><p>Implemented systems you can observe in the shared world.</p></div></div>
+          <div class="learnCards">
+            <details class="learnCard" open><summary>↔ Live multiplayer and WebSockets <span class="learnBadge used">USED IN THIS GAME</span></summary><div><p>The browser opens a same-origin WebSocket in <code>apps/web/src/main.ts</code>. The Node server in <code>apps/server/src/app.ts</code> accepts connections with the <code>ws</code> package, sends a <code>snapshot</code> first, then broadcasts batched <code>delta</code> events such as <code>node.joined</code>, <code>link.created</code>, <code>outage.applied</code>, and <code>round.scored</code>.</p><p>That keeps players synchronized without refreshing. WebSockets are the transport used here; they are not libp2p connections.</p></div></details>
+            <details class="learnCard"><summary>◉ Player identity and presence <span class="learnBadge used">USED IN THIS GAME</span></summary><div><p>The server assigns an application node ID and stores a session token. <code>apps/server/src/view.ts</code> derives player views, including <code>joinedAt</code> and online/offline presence from connected sessions. Reconnecting restores the application node when its token is valid.</p><p>This ID is generated by the game server. It is not a cryptographic libp2p Peer ID and the app does not create a libp2p identity.</p></div></details>
+            <details class="learnCard"><summary>⌁ Connection requests and acceptance <span class="learnBadge used">USED IN THIS GAME</span></summary><div><p>Selecting a node sends <code>request_link</code>. The target receives <code>link_request</code> and can accept or decline with <code>respond_link</code>. The server rechecks phase, node status, duplicate links, degree caps, and token rules before the engine creates a link.</p><p>A pending request is stored separately and rendered as a dashed indicator. Only an accepted request produces <code>link.created</code> and an active logical edge. No browser-to-browser transport is opened.</p></div></details>
+            <details class="learnCard"><summary>● Nodes, edges, and topology <span class="learnBadge used">USED IN THIS GAME</span></summary><div><p>Nodes are players; accepted links are graph edges. The authoritative graph lives in the engine state and is projected into <code>NodeView</code> and <code>LinkView</code>. <code>apps/web/src/render.ts</code> draws the current positions and edge geometry on a Canvas 2D surface.</p><p>Dragging changes a node's coordinates through movement messages. It does not create or delete links automatically; distance is visual, not a connection rule.</p></div></details>
+            <details class="learnCard"><summary>➤ Packet Run and route finding <span class="learnBadge simulated">SIMULATED</span></summary><div><p>The server's <code>activeRoute()</code> in <code>apps/server/src/app.ts</code> uses breadth-first search (BFS) across uncut links whose endpoints are active. It selects the first and last node in the current order as the mission endpoints, then sends the valid route in <code>packetMission</code>.</p><p><code>apps/web/src/main.ts</code> animates a dot along that route. If no route exists the mission is blocked or fails. This is a gameplay visualization, not a transmitted network packet or libp2p stream.</p></div></details>
+            <details class="learnCard"><summary>◎ Outages, reachability, and resilience <span class="learnBadge used">USED IN THIS GAME</span></summary><div><p><code>packages/engine/src/outage.ts</code> implements Hub strike (A), Cable cut (B), and Regional blackout (C), subject to the configured caps. Disabled nodes and cut links become inactive in the authoritative graph; recovery restores them at Results.</p><p>Connectivity uses active nodes and active links. The score considers the largest connected component, articulation points (single points whose removal can split that component), and repair speed. Alternative paths improve survival, but this is graph simulation, not transport-level recovery.</p></div></details>
+            <details class="learnCard"><summary>◷ Game phases and scoring <span class="learnBadge used">USED IN THIS GAME</span></summary><div><p>The engine advances through Growing/Build, Warning, Outage/Repair, and Results using configured timers. During Repair, <code>packages/engine/src/scoring.ts</code> calculates connectivity <code>C</code>, redundancy <code>B</code>, and speed <code>S</code>, then rounds the configured weighted result once with exact arithmetic.</p><p>The server emits <code>round.scored</code>; the HUD shows the latest score and health trend. Seeding lines below five active nodes run build-only cycles and are not scored.</p></div></details>
+          </div>
+        </section>
+
+        <section class="learnSection" aria-labelledby="libp2pTitle">
+          <div class="learnSectionHeading"><span class="learnSectionNumber">B</span><div><h3 id="libp2pTitle">The Real libp2p Concepts Behind It</h3><p>Useful comparisons, with the implementation boundary stated plainly.</p></div></div>
+          <div class="learnCards">
+            <details class="learnCard real"><summary>Peer identity <span class="learnBadge analogy">ANALOGY</span></summary><div><p><b>What it is:</b> A libp2p Peer ID is derived from a peer's cryptographic public key. <b>How real libp2p uses it:</b> it identifies the peer during secure connection setup.</p><p><b>Connection to this game:</b> the server's player/node ID identifies a participant. <b>Important difference:</b> it is an application ID, not a libp2p key or Peer ID.</p></div></details>
+            <details class="learnCard real"><summary>Peer discovery <span class="learnBadge notUsed">NOT IMPLEMENTED</span></summary><div><p><b>What it is:</b> mechanisms that find peers and usable addresses, such as a DHT or rendezvous service. <b>How real libp2p uses it:</b> discovery supplies candidates before dialing.</p><p><b>Connection to this game:</b> the player list helps you find nodes. <b>Important difference:</b> it comes from server snapshots; no libp2p discovery or addresses are exchanged.</p></div></details>
+            <details class="learnCard real"><summary>Dialing and connection establishment <span class="learnBadge analogy">ANALOGY</span></summary><div><p><b>What it is:</b> an outgoing attempt to establish a peer connection; JavaScript libp2p applications may use <code>libp2p.dial(peerId)</code>. <b>Connection to this game:</b> Request Connection models intent and consent.</p><p><b>Important difference:</b> <code>request_link</code> is application-level WebSocket messaging. It does not call libp2p or create a transport connection.</p></div></details>
+            <details class="learnCard real"><summary>Connections, streams, and protocols <span class="learnBadge notUsed">NOT IMPLEMENTED</span></summary><div><p><b>What it is:</b> a connection joins peers; a stream is a channel over it; a protocol defines how application messages are structured. <b>Connection to this game:</b> an accepted edge illustrates a relationship.</p><p><b>Important difference:</b> the game has no libp2p connection, stream, or negotiated protocol. Its messages are JSON over the game's WebSocket protocol.</p></div></details>
+            <details class="learnCard real"><summary>Publish/Subscribe <span class="learnBadge notUsed">NOT IMPLEMENTED</span></summary><div><p><b>What it is:</b> a PubSub system such as GossipSub forwards messages to subscribed peers. <b>Connection to this game:</b> many clients may receive the same server broadcast.</p><p><b>Important difference:</b> broadcasts come from the authoritative WebSocket server; this app does not use GossipSub or another libp2p PubSub protocol.</p></div></details>
+            <details class="learnCard real"><summary>Relays and NAT traversal <span class="learnBadge notUsed">EDUCATIONAL ONLY</span></summary><div><p><b>What it is:</b> relays can forward traffic when direct paths fail, while hole punching can help peers establish a direct path through NAT devices.</p><p><b>Connection to this game:</b> alternate graph paths are a useful analogy. <b>Important difference:</b> no relay, hole punching, or NAT traversal is implemented here.</p></div></details>
+            <details class="learnCard real"><summary>Resilience and alternative paths <span class="learnBadge analogy">GRAPH ANALOGY</span></summary><div><p><b>What it is:</b> redundant graph routes can preserve reachability when a node or link fails. <b>Connection to this game:</b> outage simulation, connected components, articulation points, and repair scoring make that visible.</p><p><b>Important difference:</b> this measures a simulated graph. It does not represent automatic libp2p reconnection or routing recovery.</p></div></details>
+          </div>
+        </section>
+
+        <section class="learnSection stackSection" aria-labelledby="stackTitle">
+          <div class="learnSectionHeading"><span class="learnSectionNumber">+</span><div><h3 id="stackTitle">Technology Stack</h3><p>Verified from the current source, not inferred from the product name.</p></div></div>
+          <div class="stackList"><div><b>Vanilla TypeScript + Vite</b><span>Browser application and build tool · <code>apps/web/src/main.ts</code>, <code>apps/web/vite.config.ts</code></span></div><div><b>Canvas 2D</b><span>Network rendering and animation · <code>apps/web/src/render.ts</code></span></div><div><b>Node.js HTTP + ws</b><span>Authoritative HTTP/WebSocket server · <code>apps/server/src/app.ts</code></span></div><div><b>Pure TypeScript game engine</b><span>Deterministic graph, outage, movement, and scoring rules · <code>packages/engine</code></span></div><div><b>JSON snapshots + session files</b><span>V1 persistence/reconnect support · server persistence code</span></div><div><b>Vitest + fast-check</b><span>Unit, protocol, property, and deterministic replay tests · <code>apps/*/test</code>, <code>packages/*/test</code></span></div></div>
+          <p class="learnBoundary"><b>Scope boundary:</b> No React, libp2p, GossipSub, DHT, relay, NAT traversal, or browser-to-browser transport is verified in this implementation.</p>
+        </section>
+      </div>
+    </section>
+    <section id="teamNameDialog" class="teamNameDialog" hidden role="dialog" aria-modal="true" aria-labelledby="teamNameTitle">
+      <div class="teamNameCard">
+        <p class="eyebrow">Your network is growing</p>
+        <h2 id="teamNameTitle">Give your team a name</h2>
+        <p>Accepted links connect real players into one shared team. Choose a name everyone can see.</p>
+        <label for="teamNameInput">Team name</label>
+        <input id="teamNameInput" maxlength="32" autocomplete="off" placeholder="e.g. Monsoon Mesh" />
+        <div class="teamNameActions"><button id="teamNameSave" type="button">Save team name</button><button id="teamNameLater" type="button">Later</button></div>
+      </div>
+    </section>
+    <div id="banner" hidden></div>
+    <section id="requests" aria-label="Incoming connection requests" aria-live="assertive"></section>
+    <div id="requestBar" role="dialog" aria-labelledby="requestText" hidden>
+      <div class="requestHeading">
+        <span class="requestEyebrow">Connection request</span>
+        <strong id="requestText"></strong>
+      </div>
+      <p class="requestNote">No line is created until they accept.</p>
+      <p id="requestStatus" class="requestStatus"></p>
+      <div class="requestButtons">
+        <button id="requestSend" type="button">Request Connection</button>
+        <button id="requestCancel" type="button">Cancel</button>
+      </div>
+    </div>
+    <div id="outgoing" aria-live="polite"></div>
+    <div id="toasts" aria-live="polite"></div>
+    <aside id="libp2pPopup" class="libp2pPopup" hidden role="status" aria-live="polite"></aside>
+
+    <section id="join">
+      <div class="card">
+        <h1>Mumbai Network Garden</h1>
+        <p class="sub">One shared network. Keep it connected.</p>
+        <p class="note">This is a simulated network. No wallet, no account.</p>
+        <label for="name">Display name (optional)</label>
+        <input id="name" maxlength="24" autocomplete="nickname" placeholder="Visitor" />
+        <button id="play" type="button">Join the network</button>
+        <p class="legal">Devcon 8 · Mumbai</p>
+      </div>
+    </section>
+
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
