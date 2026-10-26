@@ -8,12 +8,13 @@
 
 ### 2026-10-27 final implementation pass (IMPLEMENTED / PARTIAL)
 
-- Git boundary was verified: `git rev-parse --show-toplevel` is
-  `C:/Users/Asus/Desktop`, prefix `nodes/`; the project is not itself a Git
-  repository and is currently untracked by the unrelated parent repository.
-  No unrelated files were staged, moved, reset, or committed. Final branch is
-  parent `main`; establishing an isolated project history still requires an
-  owner-approved repository operation.
+- Git boundary was verified before isolation: the parent resolved to
+  `C:/Users/Asus/Desktop` with prefix `nodes/`. Because the project was wholly
+  untracked and Git identity was configured, a project-local repository was
+  safely initialized in `C:/Users/Asus/Desktop/nodes` and committed without
+  staging, moving, resetting, or committing unrelated Desktop files. Final
+  project root is `C:/Users/Asus/Desktop/nodes`, branch `main`, initial commit
+  `71a06f2`.
 - Added authoritative team fields to `TeamView`: area, qualification,
   recovery count, and active-link count. Team ranking now puts qualified teams
   first, then member count, recoveries, active links, and stable team ID.
@@ -32,9 +33,11 @@
 - Browser tooling remains unavailable: Chrome, Edge, Chromium, and Firefox
   were all absent from PATH. Requested viewport, touch, modal, and graphical
   two-session checks are **NOT VERIFIED**.
-- Checks run after implementation: `npx tsc --noEmit` **PASS** and
-  `npx vitest run apps/server/test/server.test.ts` **35/35 PASS**. Full suite,
-  production build, and load test must be rerun before release sign-off.
+- Checks run after implementation: `npx tsc --noEmit` **PASS**;
+  `npx vitest run apps/server/test/server.test.ts` **36/36 PASS**;
+  `npx vitest run` **118/118 PASS** across 12 files; `npm run build` **PASS**
+  (49.44 kB JS / 16.37 kB gzip, 28.50 kB CSS / 6.46 kB gzip, 17.49 kB HTML /
+  5.49 kB gzip); and `git diff --check` **PASS**.
 
 ### 2026-10-27 V1 gap-closure follow-up (BLOCKED / VERIFIED CHECKS)
 
