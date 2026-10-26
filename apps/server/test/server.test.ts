@@ -286,6 +286,34 @@ describe('handshake', () => {
     if (snapshot.type !== 'snapshot') throw new Error('expected snapshot');
     expect(snapshot.you.nodeId).toBe(nodeId);
   });
+
+  it('persists qualified team identity and Surprise Zone area across restart', async () => {
+    const persistPath = join(tmpdir(), `mng-team-restart-${randomUUID()}.json`);
+    await server.close();
+    await start({ persistPath, seed: 999 });
+    const group = await players(3);
+    await connect(group[0]!, group[1]!);
+    await connect(group[1]!, group[2]!);
+    server.line.state.phase = 'repair';
+    server.line.state.phaseStartedAt = Date.now() - 1000;
+    server.line.state.phaseEndsAt = Date.now() - 1;
+    group[0]!.client.send({ type: 'resync' });
+    const entered = await group[0]!.client.wait((m) => m.type === 'snapshot' && m.teams.some((team) => team.qualification === 'entered'));
+    if (entered.type !== 'snapshot') throw new Error('expected entered team');
+    const team = entered.teams.find((entry) => entry.qualification === 'entered');
+    if (!team) throw new Error('missing entered team');
+    const tokens = group.map((player) => player.token);
+    await server.close();
+    await start({ persistPath, seed: 999 });
+    const resumed = await open(`?token=${encodeURIComponent(tokens[0]!)}`);
+    const restored = await resumed.wait((m) => m.type === 'snapshot');
+    if (restored.type !== 'snapshot') throw new Error('expected restored snapshot');
+    const restoredTeam = restored.teams.find((entry) => entry.teamId === team.teamId);
+    expect(restoredTeam).toMatchObject({ teamId: team.teamId, area: 'surprise', qualification: 'entered', name: team.name });
+    expect(restoredTeam?.memberNodeIds).toEqual(expect.arrayContaining(group.map((player) => player.nodeId)));
+    expect(restored.nodes.find((node) => node.id === group[0]!.nodeId)?.area).toBe('surprise');
+    expect(restored.teams.filter((entry) => entry.area === 'surprise')).toHaveLength(1);
+  });
 });
 
 describe('connection requests', () => {

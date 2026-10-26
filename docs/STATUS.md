@@ -6,6 +6,31 @@
 **Owner:** Ritesh Singh
 **Prepared by:** build session
 
+### 2026-10-27 Surprise Zone persistence blocker closed (VERIFIED / PARTIAL)
+
+- Added a small versioned JSON sidecar at `<persistPath>.teams.json` for
+  server-authoritative team records and per-node `main`/`surprise` area
+  assignments. It uses the existing filesystem persistence approach; no new
+  infrastructure dependency or sensitive session data is stored.
+- Team state is loaded only when `version === 1`, references existing nodes,
+  deduplicates member IDs, validates area/qualification values, bounds names,
+  and safely ignores missing, malformed, stale-schema, or unknown-node data.
+- Team names, Surprise Zone transitions, normal save intervals, and shutdown
+  now persist the sidecar. Existing phase-edge transition logic remains
+  idempotent, so recovery does not create duplicate teams or re-enter the zone.
+- Added a restart regression using the real server lifecycle: qualify a
+  three-member team, stop the server, restart with the same line/session files,
+  reconnect by token, and verify the same team ID, members, `entered` state,
+  `surprise` area, and exactly one restored Surprise Zone team.
+- Restart regression: server tests **37/37 passed**. Full suite: `npx vitest
+  run` **119/119 passed** across 12 files. `npx tsc --noEmit` **PASS**;
+  `npm run build` **PASS** (49.44 kB JS / 16.37 kB gzip, 28.50 kB CSS /
+  6.46 kB gzip, 17.49 kB HTML / 5.49 kB gzip); `git diff --check` **PASS**.
+- Limitation: persistence remains best-effort JSON filesystem storage. A
+  failed write is intentionally non-fatal, and multi-process/shared-storage
+  coordination is not provided. Browser/mobile verification remains
+  **NOT VERIFIED** because no supported browser executable is installed.
+
 ### 2026-10-27 final implementation pass (IMPLEMENTED / PARTIAL)
 
 - Git boundary was verified before isolation: the parent resolved to

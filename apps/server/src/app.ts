@@ -138,6 +138,7 @@ export async function createGameServer(options: GameServerOptions = {}): Promise
   const clients = new Map<WebSocket, ClientConnection>();
   const sessions = new Map<string, { sessionId: string; nodeId: string; name: string }>();
   const sessionsPath = persistPath.replace(/\.json$/, '.sessions.json');
+  const teamStatePath = persistPath.replace(/\.json$/, '.teams.json');
   const rate = new Map<string, number[]>();
   /** Connection requests. Server-owned; never an edge until accepted. */
   const requests = new Map<string, RequestRecord>();
@@ -157,6 +158,25 @@ export async function createGameServer(options: GameServerOptions = {}): Promise
   const teamRecords = new Map<string, TeamRecord>();
   const areas = new Map<string, 'main' | 'surprise'>();
   const repairBaseline = new Map<string, number>();
+
+  const saveTeamState = (): void => {
+    try {
+      mkdirSync(dirname(teamStatePath), { recursive: true });
+      writeFileSync(teamStatePath, JSON.stringify({ version: 1, areas: Object.fromEntries(areas), teams: Object.fromEntries(teamRecords) }), 'utf8');
+    } catch { /* best effort, like the line snapshot */ }
+  };
+
+  try {
+    const raw = JSON.parse(readFileSync(teamStatePath, 'utf8')) as { version?: number; areas?: Record<string, unknown>; teams?: Record<string, Partial<TeamRecord>> };
+    if (raw.version === 1) {
+      for (const [id, area] of Object.entries(raw.areas ?? {})) if (line.state.nodes[id] && (area === 'main' || area === 'surprise')) areas.set(id, area);
+      for (const [teamId, value] of Object.entries(raw.teams ?? {})) {
+        const members = [...new Set(value.memberNodeIds ?? [])].filter((id): id is string => Boolean(line.state.nodes[id]));
+        if (members.length < 2) continue;
+        teamRecords.set(teamId, { name: typeof value.name === 'string' ? value.name.slice(0, 32) : null, memberNodeIds: members, createdAt: Number(value.createdAt) || clock(), area: value.area === 'surprise' ? 'surprise' : 'main', qualification: value.qualification === 'entered' ? 'entered' : value.qualification === 'qualified' ? 'qualified' : 'ineligible', recoveries: Math.max(0, Number(value.recoveries) || 0), activeLinks: 0 });
+      }
+    }
+  } catch { /* missing, invalid, or old team state starts safely empty */ }
 
   function currentTeams(now: number): TeamView[] {
     const active = new Set(line.state.nodeOrder.filter((id) => line.state.nodes[id]?.status === 'active'));
@@ -216,6 +236,7 @@ export async function createGameServer(options: GameServerOptions = {}): Promise
       if (record && record.qualification === 'qualified') {
         for (const id of winner.memberNodeIds) areas.set(id, 'surprise');
         record.area = 'surprise'; record.qualification = 'entered'; transitioned = true;
+        saveTeamState();
       }
     }
     return transitioned;
@@ -745,6 +766,7 @@ export async function createGameServer(options: GameServerOptions = {}): Promise
     }
     if (record.name === null) {
       record.name = sanitizeName(name);
+      saveTeamState();
       broadcastSnapshot();
     }
   }
@@ -1101,6 +1123,7 @@ export async function createGameServer(options: GameServerOptions = {}): Promise
     clearInterval(saveTimer);
     line.save(persistPath);
     saveSessions();
+    saveTeamState();
   };
 
   if (options.handleSignals !== false) {
@@ -1124,6 +1147,7 @@ export async function createGameServer(options: GameServerOptions = {}): Promise
       clearInterval(saveTimer);
       line.save(persistPath);
       saveSessions();
+      saveTeamState();
       for (const client of clients.values()) client.ws.close();
       await new Promise<void>((done) => wss.close(() => done()));
       await new Promise<void>((done) => http.close(() => done()));
