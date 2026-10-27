@@ -1135,8 +1135,8 @@ export async function createGameServer(options: GameServerOptions = {}): Promise
     process.once('SIGTERM', shutdown);
   }
 
-  const port = options.port ?? Number(process.env.PORT ?? 8080);
-  await new Promise<void>((resolveListen) => http.listen(port, resolveListen));
+  const port = options.port ?? Number(process.env.PORT ?? 10000);
+  await new Promise<void>((resolveListen) => http.listen(port, '0.0.0.0', resolveListen));
   const address = http.address();
   const actualPort = typeof address === 'object' && address ? address.port : port;
 

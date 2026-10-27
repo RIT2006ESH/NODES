@@ -6,11 +6,30 @@
 **Owner:** Ritesh Singh
 **Prepared by:** build session
 
+### 2026-10-27 Render port-binding configuration (VERIFIED)
+
+- The production Docker path is `CMD ["npm", "start"]`, which runs
+  `apps/server/src/main.ts`; that entry point calls `createGameServer()` from
+  `apps/server/src/app.ts`. There is one HTTP listener only. `main.ts` does not
+  create a second listener; it only reports the configured port if binding
+  fails.
+- The server default port is now `10000`, while an explicit `PORT` environment
+  variable and test `GameServerOptions.port` overrides remain supported.
+- The single HTTP/WebSocket listener now binds explicitly to `0.0.0.0`.
+  The Dockerfile declares `EXPOSE 10000` and sets its default `PORT=10000`,
+  matching Render's web-service port convention.
+- Existing `/`, `/screen`, `/healthz`, `/metrics`, `/ws`, and admin HTTP
+  routing remain attached to that same listener. Post-change validation:
+  `npm run typecheck` passed; `npm exec vitest run
+  apps/server/test/server.test.ts` passed with 37/37 tests; `npm test` passed
+  with 123/123 tests across 13 files; and `npm run build` passed with the
+  production client bundle generated successfully.
+
 ### 2026-10-27 final deployment-readiness check (PARTIAL — NOT RELEASE READY)
 
 - **Configured platform:** none is selected in the repository. The only runtime
   artifact is `Dockerfile`, whose `CMD ["npm", "start"]` launches one Node
-  process and whose `EXPOSE 8080` documents the HTTP/WebSocket port. No Render,
+  process and whose `EXPOSE 10000` documents the HTTP/WebSocket port. No Render,
   Fly, Railway, Kubernetes, Compose, replica, or volume manifest is present.
 - **Storage:** `DATA_DIR` defaults to `./data`, which is `/app/data` in the
   image. The README's Docker example mounts `mng-data:/app/data`; the Dockerfile

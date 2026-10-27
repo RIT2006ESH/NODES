@@ -6,7 +6,7 @@ try {
 } catch (error) {
   const code = (error as { code?: string }).code;
   if (code === 'EADDRINUSE') {
-    const port = process.env.PORT ?? 8080;
+    const port = process.env.PORT ?? 10000;
     console.error(`Port ${port} is already in use.`);
     console.error('Stop the other process, or start with a different port: PORT=8081 npm start');
     console.error('(dev:web proxies /ws to :8080, so Vite needs PORT=8080 or a matching proxy target.)');
