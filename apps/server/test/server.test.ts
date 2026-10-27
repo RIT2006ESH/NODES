@@ -5,7 +5,6 @@
  * server state, and only the named target can turn it into an edge. These tests
  * use a short-phase config so the suite stays fast, but the rules are the same.
  */
-
 import { randomUUID } from 'node:crypto';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -313,6 +312,18 @@ describe('handshake', () => {
     expect(restoredTeam?.memberNodeIds).toEqual(expect.arrayContaining(group.map((player) => player.nodeId)));
     expect(restored.nodes.find((node) => node.id === group[0]!.nodeId)?.area).toBe('surprise');
     expect(restored.teams.filter((entry) => entry.area === 'surprise')).toHaveLength(1);
+
+    // Recovery must be idempotent: resyncing and reconnecting another member
+    // reuses the restored team and cannot qualify it a second time.
+    resumed.send({ type: 'resync' });
+    const repeated = await resumed.wait((message) => message.type === 'snapshot');
+    if (repeated.type !== 'snapshot') throw new Error('expected repeated snapshot');
+    expect(repeated.teams.filter((entry) => entry.area === 'surprise')).toHaveLength(1);
+    const secondResumed = await open(`?token=${encodeURIComponent(tokens[1]!)}`);
+    const secondSnapshot = await secondResumed.wait((message) => message.type === 'snapshot');
+    if (secondSnapshot.type !== 'snapshot') throw new Error('expected second restored snapshot');
+    expect(secondSnapshot.teams.filter((entry) => entry.teamId === team.teamId)).toHaveLength(1);
+    expect(secondSnapshot.teams.find((entry) => entry.teamId === team.teamId)?.qualification).toBe('entered');
   });
 });
 

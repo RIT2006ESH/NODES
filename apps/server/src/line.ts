@@ -5,7 +5,7 @@
  * time, the event ring buffer and the on-disk snapshot.
  */
 
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { dirname } from 'node:path';
 import type { GameConfig } from '@mng/config';
 import { createLine, moveNode, reduce } from '@mng/engine';
@@ -71,7 +71,9 @@ export class LineHost {
   save(path: string): void {
     try {
       mkdirSync(dirname(path), { recursive: true });
-      writeFileSync(path, JSON.stringify({ savedAt: Date.now(), state: this.state }), 'utf8');
+      const temporaryPath = `${path}.${process.pid}.tmp`;
+      writeFileSync(temporaryPath, JSON.stringify({ savedAt: Date.now(), state: this.state }), 'utf8');
+      renameSync(temporaryPath, path);
     } catch {
       // Persistence is best effort in V1; a failed write must not kill the game.
     }

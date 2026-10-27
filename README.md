@@ -109,7 +109,7 @@ Screen/projector view: `/screen` (same board, no HUD, read-only).
 | `PORT` | `8080` | HTTP + WebSocket port |
 | `SEED` | time-based | RNG seed; fixed seed makes strike choice reproducible |
 | `ADMIN_SECRET` | unset | Enables `/admin/*`; unset means admin is disabled |
-| `DATA_DIR` | `./data` | Directory for `line.json` and `line.sessions.json` |
+| `DATA_DIR` | `./data` | Directory for `line.json`, `line.sessions.json`, and `line.teams.json` |
 
 Secrets are read from the environment only (there is no dotenv loader).
 `.env.example` is documentation; export the variables in the shell or set them in
@@ -195,7 +195,12 @@ horizontal scaling requires the Redis/sharding work that is **not** implemented
 - Set `ADMIN_SECRET` in the platform dashboard, never in git.
 - Set `DATA_DIR` to a mounted volume if restart recovery matters.
 
-The process writes a state snapshot every 10 s and on shutdown (best effort).
+The process writes state snapshots every 10 s and on shutdown (best effort). The
+JSON files are replaced atomically one at a time; they are not a transaction, so
+a crash between file replacements can leave different files from different
+save moments. Startup validates each file and ignores malformed or incompatible
+records. Pending connection requests and Packet Run runtime state are intentionally
+not persisted.
 On ephemeral filesystems that file disappears on redeploy; attach a small volume
 for restart survival.
 

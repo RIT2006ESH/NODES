@@ -6,7 +6,7 @@
  */
 
 import { createServer, type Server, type IncomingMessage, type ServerResponse } from 'node:http';
-import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, renameSync, statSync, writeFileSync } from 'node:fs';
 import { dirname, extname, join, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { randomBytes } from 'node:crypto';
@@ -162,7 +162,9 @@ export async function createGameServer(options: GameServerOptions = {}): Promise
   const saveTeamState = (): void => {
     try {
       mkdirSync(dirname(teamStatePath), { recursive: true });
-      writeFileSync(teamStatePath, JSON.stringify({ version: 1, areas: Object.fromEntries(areas), teams: Object.fromEntries(teamRecords) }), 'utf8');
+      const temporaryPath = `${teamStatePath}.${process.pid}.tmp`;
+      writeFileSync(temporaryPath, JSON.stringify({ version: 1, areas: Object.fromEntries(areas), teams: Object.fromEntries(teamRecords) }), 'utf8');
+      renameSync(temporaryPath, teamStatePath);
     } catch { /* best effort, like the line snapshot */ }
   };
 
@@ -305,7 +307,9 @@ export async function createGameServer(options: GameServerOptions = {}): Promise
   const saveSessions = (): void => {
     try {
       mkdirSync(dirname(sessionsPath), { recursive: true });
-      writeFileSync(sessionsPath, JSON.stringify(Object.fromEntries(sessions)), 'utf8');
+      const temporaryPath = `${sessionsPath}.${process.pid}.tmp`;
+      writeFileSync(temporaryPath, JSON.stringify(Object.fromEntries(sessions)), 'utf8');
+      renameSync(temporaryPath, sessionsPath);
     } catch {
       // best effort, same as the state snapshot
     }

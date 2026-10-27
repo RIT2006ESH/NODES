@@ -6,6 +6,87 @@
 **Owner:** Ritesh Singh
 **Prepared by:** build session
 
+### 2026-10-27 final deployment-readiness check (PARTIAL — NOT RELEASE READY)
+
+- **Configured platform:** none is selected in the repository. The only runtime
+  artifact is `Dockerfile`, whose `CMD ["npm", "start"]` launches one Node
+  process and whose `EXPOSE 8080` documents the HTTP/WebSocket port. No Render,
+  Fly, Railway, Kubernetes, Compose, replica, or volume manifest is present.
+- **Storage:** `DATA_DIR` defaults to `./data`, which is `/app/data` in the
+  image. The README's Docker example mounts `mng-data:/app/data`; the Dockerfile
+  itself does not create or declare that volume. Persistence across redeploys is
+  therefore **NOT VERIFIED** and depends on the operator attaching durable
+  storage and setting one replica.
+- **Runtime wiring:** `PORT`, `SEED`, `ADMIN_SECRET`, and `DATA_DIR` are read
+  from the environment. `/healthz` and `/metrics` are implemented in the HTTP
+  server; WebSocket traffic uses `/ws`; SIGINT/SIGTERM and `GameServer.close()`
+  save the JSON files. A reverse proxy must preserve WebSocket upgrade to the
+  same process. No hosting shutdown or proxy behavior was executable here.
+- **Persistence policy:** the five-minute `LineHost.load()` cutoff remains. A
+  fresh or 4:59 snapshot restores; an older snapshot is intentionally rejected,
+  so valid progress can be lost after more than five minutes of downtime.
+  Individual JSON files are atomically replaced, but the three files are not a
+  transaction. Malformed/partial files are ignored or structurally filtered;
+  mixed-generation files may lose the newest cross-file combination but do not
+  intentionally create duplicate teams or invalid accepted edges.
+- **Browser QA:** **NOT VERIFIED**. Browser tooling remains unavailable in this
+  environment. Owner manual checklist: test desktop plus 360x800, 390x844 and
+  430x932; join/reconnect two sessions; request/accept/decline; drag/keyboard
+  movement; outage/repair/result; scoring; team naming/leaderboard; Surprise
+  Zone entry; Packet Run; all education/search/dialog buttons; console errors;
+  overflow and 44px touch targets.
+- **Assessment:** persistence implementation and automated checks are **PASS**;
+  deployment durability and browser/mobile verification are **NOT VERIFIED**.
+  Overall release status remains **PARTIAL / NOT RELEASE READY**.
+
+### 2026-10-27 persistence safety audit (PASS / PARTIAL)
+
+- `LineHost.load()` rejects snapshots whose persisted `state.now` is more than
+  five minutes old. This intentionally avoids reviving a phase/timer snapshot
+  that could be hours stale; it also means valid progress is discarded after a
+  downtime longer than five minutes and the server starts a fresh Line.
+- Normal operation saves `line.json` every 10 seconds and again during
+  `GameServer.close()`/SIGTERM shutdown. Fresh and 4:59 snapshots restore;
+  snapshots older than five minutes are rejected. Focused regression coverage is
+  in `apps/server/test/persistence.test.ts` (4 tests).
+- `line.json`, `line.sessions.json`, and `line.teams.json` are now each written
+  with temporary-file replacement. This prevents a single truncated JSON file,
+  but the three files are not one transaction: a crash between replacements can
+  leave mixed save generations. Startup safely filters sessions and team members
+  against the loaded Line, ignores malformed/schema-invalid files, deduplicates
+  members, and only accepts valid areas/qualification values. The remaining
+  operational risk is loss of the newest cross-file combination, not duplicate
+  authoritative teams from malformed input.
+- The Dockerfile starts exactly one `npm start` process and exposes one port; it
+  does not declare a persistent volume. Deployment operators must mount a durable
+  volume at `DATA_DIR` and configure one replica/process. This environment cannot
+  verify the hosting provider's volume or replica policy, so deployment durability
+  is **NOT VERIFIED**. Horizontal scaling remains unsupported.
+- Pending connection requests, terminal request cache, Packet Run mission state,
+  rate-limit windows, active sockets, event replay buffer, repair baseline, and
+  process metrics intentionally do not survive restart. Accepted edges, nodes,
+  scores/history, sessions, team identity/membership/name, and area assignments
+  do survive when the Line snapshot and sidecars are valid, recent, and stored on
+  the same durable volume.
+- Safety audit checks: focused persistence/server tests **41/41 passed**, full
+  suite **123/123 passed**, `npm run typecheck` **PASS**, `npm run build` **PASS**,
+  and `git diff --check` **PASS**.
+
+### 2026-10-27 release-candidate verification (PARTIAL — NOT RELEASE READY)
+
+| Requirement | Status | Evidence / remaining gap |
+|---|---|---|
+| Surprise Zone restart persistence | **PASS** | `apps/server/test/server.test.ts`: 37 server tests pass. The lifecycle regression qualifies a three-member team, closes and recreates the server with the same persisted files, reconnects by token, verifies the same team ID/member set and `surprise` area, then repeats resync and a second reconnect to prove one `entered` team and no duplicate transition. |
+| Join, requests, acceptance/decline, movement, accepted edges | **PASS (automated)** | Server integration coverage includes join/reconnect, request lifecycle and idempotence, decline/expiry, movement bounds/rate limits, late snapshots, and persistent accepted edges. |
+| Outages, repairs, phases, scoring | **PASS (automated)** | Engine rules/scoring/strike/property tests and server phase/repair integration coverage pass. |
+| Team formation, naming, merge behavior, metrics, qualification, Surprise Zone | **PARTIAL** | Authoritative server tests cover formation, naming, connected teams, qualification, area assignment, reconnect and restart. Merge/split edge cases and complete multi-client browser presentation are not visually verified. |
+| Packet Run and all important buttons | **PARTIAL** | Source and automated render/community coverage exist; no browser session was available to click through Packet Run, education, request, search, leaderboard, movement and team controls. |
+| Mobile visual QA (360/390/430) and desktop visual QA | **NOT VERIFIED** | Browser tooling is unavailable in this environment. Owner must manually check those viewports, touch targets, overflow, dialogs, canvas gestures, console errors and two-session sync. |
+| Release integrity and configuration | **PASS / PARTIAL** | `main` is one commit ahead of `origin/main`; remote is configured; no tracked `.env` or credential-like files were found; `/healthz` and `/metrics` respond on the running server. Deployment itself was not performed. Local JSON persistence is atomic for the team sidecar but remains best-effort and single-process. |
+| Capacity claim | **NOT CLAIMED** | Existing load evidence is 50 clients only; no 10,000-client claim is made. |
+
+Release checks for this audit: `npm test` **119/119 passed**, `npm run typecheck` **passed**, `npm run build` **passed**, server restart regression **37/37 passed**, and `git diff --check` **passed**. The working tree contains only the scoped persistence hardening, regression assertion, and this status update. V1 release remains blocked by missing visual/browser verification and undeployed-environment verification.
+
 ### 2026-10-27 Surprise Zone persistence blocker closed (VERIFIED / PARTIAL)
 
 - Added a small versioned JSON sidecar at `<persistPath>.teams.json` for
@@ -27,8 +108,8 @@
   `npm run build` **PASS** (49.44 kB JS / 16.37 kB gzip, 28.50 kB CSS /
   6.46 kB gzip, 17.49 kB HTML / 5.49 kB gzip); `git diff --check` **PASS**.
 - Limitation: persistence remains best-effort JSON filesystem storage. A
-  failed write is intentionally non-fatal, and multi-process/shared-storage
-  coordination is not provided. Browser/mobile verification remains
+  failed write is intentionally non-fatal; team sidecar replacement is atomic,
+  but multi-process/shared-storage coordination is not provided. Browser/mobile verification remains
   **NOT VERIFIED** because no supported browser executable is installed.
 
 ### 2026-10-27 final implementation pass (IMPLEMENTED / PARTIAL)
