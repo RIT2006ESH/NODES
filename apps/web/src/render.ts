@@ -176,6 +176,26 @@ export interface DrawOptions {
   readonly highlightId: string | null;
   readonly highlightUntil: number;
   readonly worldRadius: number;
+<<<<<<< HEAD
+=======
+  /** Single points of failure in the largest group; drawn as amber warning rings. */
+  readonly weakIds?: ReadonlySet<string>;
+  /** Likely Hub-strike targets, drawn as red reticles during Warning. */
+  readonly hubIds?: ReadonlySet<string>;
+  /** Ambient data packets travelling along live links. */
+  readonly flow?: boolean;
+  /** Drawn under the network (ambient dust). */
+  readonly backdrop?: (ctx: CanvasRenderingContext2D) => void;
+}
+
+function hash01(text: string): number {
+  let h = 2166136261;
+  for (let i = 0; i < text.length; i++) {
+    h ^= text.charCodeAt(i);
+    h = Math.imul(h, 16777619);
+  }
+  return ((h >>> 0) % 1000) / 1000;
+>>>>>>> origin/prince
 }
 
 export function drawBoard(options: DrawOptions): void {
@@ -193,6 +213,11 @@ export function drawBoard(options: DrawOptions): void {
   for (let y = 0; y < options.height; y += grid) ctx.fillRect(0, y, options.width, 1);
   ctx.restore();
 
+<<<<<<< HEAD
+=======
+  options.backdrop?.(ctx);
+
+>>>>>>> origin/prince
   const linkList = [...links.values()];
   const comp = componentIndex(linkList, nodes);
 
@@ -231,6 +256,28 @@ export function drawBoard(options: DrawOptions): void {
       ctx.stroke();
       ctx.globalAlpha = 1;
 
+<<<<<<< HEAD
+=======
+      // Ambient traffic: a faint packet drifts along every live link so a healthy
+      // network visibly hums and a cut one visibly goes quiet.
+      if (options.flow && !dimmed && linkList.length <= 260) {
+        const t = (now / 2600 + hash01(link.id)) % 1;
+        const dir = hash01(link.id + 'd') > 0.5 ? t : 1 - t;
+        ctx.beginPath();
+        ctx.arc(
+          geometry.ax + (geometry.bx - geometry.ax) * dir,
+          geometry.ay + (geometry.by - geometry.ay) * dir,
+          1.7,
+          0,
+          Math.PI * 2,
+        );
+        ctx.fillStyle = PALETTE[idx] as string;
+        ctx.globalAlpha = 0.7;
+        ctx.fill();
+        ctx.globalAlpha = 1;
+      }
+
+>>>>>>> origin/prince
       const pulseEnd = options.pulseLinks?.get(link.id) ?? 0;
       if (pulseEnd > now) {
         const progress = 1 - (pulseEnd - now) / 900;
@@ -346,6 +393,40 @@ export function drawBoard(options: DrawOptions): void {
       ctx.strokeStyle = previewGroup % 2 ? '#ffc66d' : '#468dff'; ctx.globalAlpha = .28; ctx.lineWidth = 1; ctx.stroke(); ctx.globalAlpha = 1;
     }
 
+<<<<<<< HEAD
+=======
+    // Strategy overlay: amber = removing this node would split the group
+    // (a single point of failure); red reticle = what a Hub strike would hunt.
+    if (!disabled && !dimmed && options.weakIds?.has(node.id)) {
+      const wobble = 1 + 0.1 * Math.sin(now / 260 + hash01(node.id) * 6);
+      ctx.save();
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, (r + 7) * wobble, 0, Math.PI * 2);
+      ctx.setLineDash([3, 4]);
+      ctx.lineDashOffset = -now / 70;
+      ctx.strokeStyle = '#ffc66d';
+      ctx.globalAlpha = 0.9;
+      ctx.lineWidth = 1.6;
+      ctx.stroke();
+      ctx.restore();
+    }
+    if (!disabled && !dimmed && options.hubIds?.has(node.id)) {
+      const o = r + 11 + Math.sin(now / 140) * 1.5;
+      const tick = 5;
+      ctx.save();
+      ctx.strokeStyle = '#ff667d';
+      ctx.lineWidth = 1.6;
+      ctx.globalAlpha = 0.95;
+      ctx.beginPath();
+      for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]] as const) {
+        ctx.moveTo(p.x + dx * o, p.y + dy * o);
+        ctx.lineTo(p.x + dx * (o - tick), p.y + dy * (o - tick));
+      }
+      ctx.stroke();
+      ctx.restore();
+    }
+
+>>>>>>> origin/prince
     // Search/leaderboard discovery highlight. This is purely visual: it does
     // not select a request target or create a connection.
     if (options.highlightId === node.id && now < options.highlightUntil) {

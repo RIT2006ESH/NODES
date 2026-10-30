@@ -24,6 +24,22 @@ import {
   type TeamView,
 } from '@mng/protocol';
 import { drawBoard, fitCamera, pickNode, toWorld, type Camera, type PendingLink } from './render';
+<<<<<<< HEAD
+=======
+import { Fx, Sfx } from './fx';
+import {
+  ACHIEVEMENTS,
+  analyseNetwork,
+  applyProgress,
+  gradeFor,
+  loadProgress,
+  rankFor,
+  saveProgress,
+  STRIKE_NAME,
+  type Analysis,
+  type ProgressEvent,
+} from './insight';
+>>>>>>> origin/prince
 import {
   buildLeaderboard,
   RELATION_LABEL,
@@ -86,6 +102,20 @@ const el = {
   packetDot: document.getElementById('packetDot') as HTMLElement,
   activityItems: document.getElementById('activityItems') as HTMLElement,
   libp2pPopup: document.getElementById('libp2pPopup') as HTMLElement,
+<<<<<<< HEAD
+=======
+  integrity: document.getElementById('integrity') as HTMLElement,
+  weakChip: document.getElementById('weakChip') as HTMLButtonElement,
+  toggleWeak: document.getElementById('toggleWeak') as HTMLButtonElement,
+  toggleSound: document.getElementById('toggleSound') as HTMLButtonElement,
+  operator: document.getElementById('operator') as HTMLButtonElement,
+  opLevel: document.getElementById('opLevel') as HTMLElement,
+  opTitle: document.getElementById('opTitle') as HTMLElement,
+  opXp: document.getElementById('opXp') as HTMLElement,
+  opBar: document.getElementById('opBar') as HTMLElement,
+  resultCard: document.getElementById('resultCard') as HTMLElement,
+  achievements: document.getElementById('achievements') as HTMLElement,
+>>>>>>> origin/prince
 };
 
 const spectator =
@@ -137,6 +167,21 @@ const model: Model = {
 };
 let promptedTeamId: string | null = null;
 
+<<<<<<< HEAD
+=======
+// Gameplay layer (cosmetic + strategic; never changes a rule).
+const fx = new Fx();
+const sfx = new Sfx();
+let radarOn = (() => { try { return localStorage.getItem('mng.radar') !== '0'; } catch { return true; } })();
+let analysis: Analysis = analyseNetwork(new Map(), new Map());
+let progress = loadProgress();
+let prevPhase: Phase | null = null;
+let weakCursor = 0;
+let resultTimer = 0;
+let recoverFlashUntil = 0;
+let resilientRound = -1;
+
+>>>>>>> origin/prince
 const pending = new Map<string, PendingLink & { requestId: string }>();
 let camera: Camera = { scale: 1, ox: 0, oy: 0 };
 let pulseUntil = 0;
@@ -353,6 +398,10 @@ function handleMessage(message: ServerMessage): void {
     case 'link_request':
       model.incoming.set(message.request.requestId, message.request);
       toast(`${message.request.fromName} wants to connect`, 'info');
+<<<<<<< HEAD
+=======
+      sfx.request();
+>>>>>>> origin/prince
       renderRequests();
       renderTargetBar();
       if (searchOpen) renderSearchResults();
@@ -432,6 +481,10 @@ function handleError(code: string): void {
 
 function onJoined(): void {
   joined = true;
+<<<<<<< HEAD
+=======
+  if (el.operator.hidden) renderOperator();
+>>>>>>> origin/prince
   retry = 0;
   readOnly = false;
   el.play.disabled = false;
@@ -468,6 +521,10 @@ function applySnapshot(message: SnapshotMessage): void {
   model.visual = new Map(message.nodes.map((node) => [node.id, { x: node.x, y: node.y }]));
   model.me = message.you;
   model.phase = message.phase;
+<<<<<<< HEAD
+=======
+  prevPhase = message.phase;
+>>>>>>> origin/prince
   model.endsAt = message.phaseEndsAt;
   model.roundNo = message.roundNo;
   model.lastScore = message.lastScore;
@@ -505,15 +562,27 @@ function applySnapshot(message: SnapshotMessage): void {
 function applyDelta(message: DeltaMessage): void {
   let panelsDirty = false;
   model.offset = message.serverNow - Date.now();
+<<<<<<< HEAD
   model.phase = message.phase;
   model.endsAt = message.phaseEndsAt;
   model.roundNo = message.roundNo;
+=======
+  const phaseBefore = prevPhase;
+  model.phase = message.phase;
+  model.endsAt = message.phaseEndsAt;
+  model.roundNo = message.roundNo;
+  prevPhase = message.phase;
+>>>>>>> origin/prince
   model.me = message.you;
   model.lastScore = message.lastScore;
   model.stats = message.stats;
   model.packetMission = message.packetMission ?? model.packetMission;
   model.teams = [...message.teams];
   youAt = Date.now();
+<<<<<<< HEAD
+=======
+  if (phaseBefore !== null && phaseBefore !== message.phase) onPhaseChange(message.phase);
+>>>>>>> origin/prince
 
   for (const event of message.events) {
     switch (event.type) {
@@ -557,6 +626,10 @@ function applyDelta(message: DeltaMessage): void {
           starter: false,
         });
         linkPulses.set(String(event.linkId), Date.now() + 900);
+<<<<<<< HEAD
+=======
+        linkFx(event);
+>>>>>>> origin/prince
         const byNodeId = String(event.byNodeId ?? '');
         const author = byNodeId ? model.nodes.get(byNodeId) : undefined;
         if (event.restoredRoute && author) {
@@ -578,6 +651,10 @@ function applyDelta(message: DeltaMessage): void {
       case 'outage.applied': {
         outageFlashUntil = Date.now() + 1200;
         const strike = event.strike as { nodes?: string[]; links?: string[] } | undefined;
+<<<<<<< HEAD
+=======
+        outageFx(strike);
+>>>>>>> origin/prince
         for (const id of strike?.nodes ?? []) {
           const node = model.nodes.get(id);
           if (node) model.nodes.set(id, { ...node, status: 'disabled' });
@@ -594,6 +671,10 @@ function applyDelta(message: DeltaMessage): void {
       }
 
       case 'round.recovered':
+<<<<<<< HEAD
+=======
+        recoveryFx();
+>>>>>>> origin/prince
         outageFlashUntil = Date.now() + 900;
         for (const [id, node] of model.nodes) model.nodes.set(id, { ...node, status: 'active' });
         for (const [id, link] of model.links) model.links.set(id, { ...link, active: true });
@@ -609,9 +690,13 @@ function applyDelta(message: DeltaMessage): void {
 
 
       case 'round.scored': {
+<<<<<<< HEAD
         const result = event.result as
           | { roundNo: number; score: number; c: ScoreView['c']; b: ScoreView['b']; s2: 0 | 1 | 2; strike: { type: 'A' | 'B' | 'C' } }
           | undefined;
+=======
+        const result = event.result as ResultPayload | undefined;
+>>>>>>> origin/prince
         if (result) {
           model.lastScore = {
             roundNo: result.roundNo,
@@ -623,7 +708,12 @@ function applyDelta(message: DeltaMessage): void {
           };
           model.history = [...model.history.slice(-59), result.score];
           activity(`Round ${result.roundNo} complete · network score ${result.score}`, 'good');
+<<<<<<< HEAD
           toast(`Round complete — network score ${result.score}`, 'good');
+=======
+          const gained = awardProgress({ kind: 'round', score: result.score });
+          showResultCard(result, gained);
+>>>>>>> origin/prince
         }
         break;
       }
@@ -638,6 +728,305 @@ function applyDelta(message: DeltaMessage): void {
   }
 }
 
+<<<<<<< HEAD
+=======
+
+// ---------------------------------------------------------------------------
+// Gameplay layer: effects, weak-point radar, result card, rank
+// ---------------------------------------------------------------------------
+
+interface ResultPayload {
+  roundNo: number;
+  score: number;
+  c: ScoreView['c'];
+  b: ScoreView['b'];
+  s2: 0 | 1 | 2;
+  strike: { type: 'A' | 'B' | 'C' };
+}
+
+let lastRestoredSfxAt = 0;
+
+function nodePoint(id: string): { x: number; y: number } | null {
+  const visual = model.visual.get(id);
+  if (visual) return visual;
+  const node = model.nodes.get(id);
+  return node ? { x: node.x, y: node.y } : null;
+}
+
+function awardProgress(event: ProgressEvent): number {
+  if (spectator || !model.me?.nodeId) return 0;
+  const result = applyProgress(progress, event);
+  progress = result.progress;
+  saveProgress(progress);
+  renderOperator();
+  for (const def of result.unlocked) {
+    sfx.achievement();
+    toast(`Achievement unlocked: ${def.title}`, 'good');
+    activity(`Achievement unlocked · ${def.title}`, 'good');
+  }
+  return result.gained;
+}
+
+function linkFx(event: Readonly<Record<string, unknown>>): void {
+  const aId = String(event.a);
+  const bId = String(event.b);
+  const a = nodePoint(aId);
+  const b = nodePoint(bId);
+  if (!a || !b) return;
+  const mx = (a.x + b.x) / 2;
+  const my = (a.y + b.y) / 2;
+  const restored = Boolean(event.restoredRoute);
+  const colour = restored ? '#ffe08a' : '#82e8cc';
+  const mine = aId === model.me?.nodeId || bId === model.me?.nodeId;
+  fx.burst(mx, my, colour, restored ? 28 : 14, restored ? 130 : 80);
+  fx.ring(a.x, a.y, colour, 34, 600, 1.5);
+  fx.ring(b.x, b.y, colour, 34, 600, 1.5);
+  if (restored) {
+    fx.ring(mx, my, colour, 90, 950, 2.5);
+    fx.float(mx, my, 'ROUTE RESTORED', colour);
+    const now = Date.now();
+    if (mine || now - lastRestoredSfxAt > 1500) {
+      lastRestoredSfxAt = now;
+      sfx.restored();
+    }
+  } else if (mine) {
+    sfx.link();
+  }
+  if (mine) {
+    awardProgress({ kind: 'link', restored: restored && String(event.byNodeId) === model.me?.nodeId });
+  }
+}
+
+function outageFx(strike: { nodes?: string[]; links?: string[] } | undefined): void {
+  let hits = 0;
+  for (const id of strike?.nodes ?? []) {
+    const p = nodePoint(id);
+    if (!p) continue;
+    hits++;
+    fx.burst(p.x, p.y, '#ff667d', 36, 160, 950);
+    fx.ring(p.x, p.y, '#ff667d', 96, 950, 3);
+    fx.ring(p.x, p.y, '#ffc66d', 58, 700, 1.5);
+    fx.float(p.x, p.y, model.nodes.get(id)?.name ?? 'DOWN', '#ffb3bf');
+  }
+  for (const id of strike?.links ?? []) {
+    const link = model.links.get(id);
+    const a = link ? nodePoint(link.a) : null;
+    const b = link ? nodePoint(link.b) : null;
+    if (!a || !b) continue;
+    fx.burst((a.x + b.x) / 2, (a.y + b.y) / 2, '#ffc66d', 20, 110, 800);
+    fx.ring((a.x + b.x) / 2, (a.y + b.y) / 2, '#ffc66d', 50, 650, 2);
+  }
+  fx.shake(Math.min(16, 6 + hits * 2), 650);
+  sfx.strike();
+  const meId = model.me?.nodeId;
+  if (meId && (strike?.nodes ?? []).includes(meId)) {
+    toast('Your node was knocked out until Results.', 'bad');
+    awardProgress({ kind: 'hit' });
+  }
+}
+
+function recoveryFx(): void {
+  let any = false;
+  for (const node of model.nodes.values()) {
+    if (node.status !== 'disabled') continue;
+    const p = nodePoint(node.id);
+    if (!p) continue;
+    any = true;
+    fx.ring(p.x, p.y, '#82e8cc', 80, 900, 2.5);
+    fx.burst(p.x, p.y, '#82e8cc', 18, 100, 800);
+  }
+  if (any) sfx.recover();
+  recoverFlashUntil = Date.now() + 900;
+}
+
+function onPhaseChange(next: Phase): void {
+  if (next === 'warning') {
+    sfx.warning();
+    activity('Warning: an outage is about to hit', 'warn');
+    const a = analyseNetwork(model.nodes, model.links);
+    if (
+      a.activeCount >= 6 &&
+      a.componentSize === a.activeCount &&
+      a.cutVertices.size === 0 &&
+      resilientRound !== model.roundNo
+    ) {
+      resilientRound = model.roundNo;
+      if (awardProgress({ kind: 'resilient' })) {
+        toast("No single point of failure: one lost node can't split this network.", 'good');
+      }
+    }
+  }
+  if (next === 'build' || next === 'warning') hideResultCard();
+}
+
+function hideResultCard(): void {
+  window.clearTimeout(resultTimer);
+  el.resultCard.hidden = true;
+}
+
+function showResultCard(result: ResultPayload, gained: number): void {
+  const grade = gradeFor(result.score);
+  const pct = (r: { num: number; den: number }): number => (r.den ? Math.round((100 * r.num) / r.den) : 0);
+  const reach = pct(result.c);
+  const redundancy = pct(result.b);
+  const speed = result.s2 * 50;
+
+  let coach = 'Flawless. Nothing to fix.';
+  if (reach < 100) coach = 'Reach cost you: some peers ended up cut off. Bridge the split groups during Repair.';
+  else if (redundancy < 100) coach = 'Redundancy cost you: single points of failure remained. Give fragile nodes a second path.';
+  else if (speed < 100) coach = 'Repair faster to earn the full speed bonus.';
+  const xp = gained > 0 ? ` <b>+${gained} XP</b>` : '';
+  const streak = progress.streak >= 2 && !spectator ? ` · ${progress.streak}-round streak` : '';
+
+  el.resultCard.innerHTML =
+    `<div class="resultEyebrow">Round ${result.roundNo} · ${STRIKE_NAME[result.strike.type]}</div>` +
+    `<div class="resultGrade g-${grade}">${grade}</div>` +
+    `<div class="resultScore"><span id="resultNum">0</span><small> / 100</small></div>` +
+    `<div class="resultBars">` +
+    `<div class="resultBar"><span>Reach</span><i><u data-w="${reach}"></u></i><span>${reach}%</span></div>` +
+    `<div class="resultBar"><span>Redundancy</span><i><u data-w="${redundancy}"></u></i><span>${redundancy}%</span></div>` +
+    `<div class="resultBar"><span>Speed</span><i><u data-w="${speed}"></u></i><span>${speed}%</span></div>` +
+    `</div><div class="resultFoot">${coach}${xp}${streak}</div>`;
+  el.resultCard.hidden = false;
+
+  requestAnimationFrame(() => {
+    el.resultCard.querySelectorAll<HTMLElement>('u[data-w]').forEach((bar) => {
+      bar.style.width = `${bar.dataset.w}%`;
+    });
+  });
+  const num = el.resultCard.querySelector<HTMLElement>('#resultNum');
+  const started = performance.now();
+  const finalText = result.score % 1 ? result.score.toFixed(1) : String(result.score);
+  const tick = (t: number): void => {
+    if (!num) return;
+    const k = Math.min(1, (t - started) / 800);
+    num.textContent = k >= 1 ? finalText : String(Math.round(result.score * (1 - Math.pow(1 - k, 3))));
+    if (k < 1) requestAnimationFrame(tick);
+  };
+  requestAnimationFrame(tick);
+
+  sfx.score(grade);
+  if (grade === 'S' || grade === 'A') {
+    const ids = [...model.nodes.values()].filter((n) => n.status === 'active').map((n) => n.id);
+    for (let i = 0; i < Math.min(7, ids.length); i++) {
+      const id = ids[Math.floor(Math.random() * ids.length)] as string;
+      const p = nodePoint(id);
+      if (p) window.setTimeout(() => {
+        fx.burst(p.x, p.y, grade === 'S' ? '#ffe08a' : '#82e8cc', 22, 130, 900);
+        fx.ring(p.x, p.y, grade === 'S' ? '#ffe08a' : '#82e8cc', 70, 800, 2);
+      }, i * 130);
+    }
+  } else if (grade === 'D') {
+    fx.shake(4, 300);
+  }
+
+  window.clearTimeout(resultTimer);
+  resultTimer = window.setTimeout(hideResultCard, 9000);
+}
+
+function renderOperator(): void {
+  if (spectator || !model.me?.nodeId) {
+    el.operator.hidden = true;
+    return;
+  }
+  const rank = rankFor(progress.xp);
+  el.operator.hidden = false;
+  el.opLevel.textContent = String(rank.level);
+  el.opTitle.textContent = rank.title;
+  el.opXp.textContent = rank.toNext === null ? `${progress.xp} XP · top rank` : `${progress.xp} XP · ${rank.toNext} to next`;
+  el.opBar.style.width = `${Math.round(rank.fraction * 100)}%`;
+  if (!el.achievements.hidden) renderAchievements();
+}
+
+function renderAchievements(): void {
+  const done = new Set(progress.unlocked);
+  el.achievements.innerHTML =
+    `<div class="achHead"><b>ACHIEVEMENTS</b><span>${done.size}/${ACHIEVEMENTS.length} · saved on this device</span></div>` +
+    ACHIEVEMENTS.map(
+      (a) =>
+        `<div class="achRow ${done.has(a.id) ? 'done' : ''}"><span class="achMark">${done.has(a.id) ? '✓' : ''}</span><div><b>${a.title}</b><small>${a.text}</small></div></div>`,
+    ).join('');
+}
+
+el.operator.addEventListener('click', () => {
+  el.achievements.hidden = !el.achievements.hidden;
+  if (!el.achievements.hidden) renderAchievements();
+});
+
+function refreshIntegrity(): void {
+  analysis = analyseNetwork(model.nodes, model.links);
+  const a = analysis;
+  if (a.activeCount < 2) {
+    el.integrity.textContent = '—';
+    el.integrity.className = '';
+    el.weakChip.hidden = true;
+    return;
+  }
+  const pct = Math.round(((2 * a.reach + a.redundancy) / 3) * 100);
+  const text = `${pct}%`;
+  if (el.integrity.textContent !== text) el.integrity.textContent = text;
+  el.integrity.className = pct < 35 ? 'crit' : pct < 60 ? 'low' : '';
+  const tip = `Reach ${Math.round(a.reach * 100)}% · Redundancy ${Math.round(a.redundancy * 100)}% · base score ${a.baseScore}/90 before the speed bonus`;
+  if (el.integrity.parentElement && el.integrity.parentElement.title !== tip) el.integrity.parentElement.title = tip;
+
+  if (spectator || a.componentSize < 3) {
+    el.weakChip.hidden = true;
+    return;
+  }
+  const meId = model.me?.nodeId ?? null;
+  const weak = a.cutVertices.size;
+  let cls = 'weakChip';
+  let label: string;
+  if (weak === 0) {
+    cls += ' safe';
+    label = '✓ no weak points';
+  } else if (meId && a.cutVertices.has(meId)) {
+    cls += ' me';
+    label = "⚠ you're a weak point";
+  } else {
+    label = `⚠ ${weak} weak point${weak === 1 ? '' : 's'}`;
+  }
+  el.weakChip.hidden = false;
+  if (el.weakChip.className !== cls) el.weakChip.className = cls;
+  if (el.weakChip.textContent !== label) el.weakChip.textContent = label;
+}
+
+el.weakChip.addEventListener('click', () => {
+  const ids = [...analysis.cutVertices];
+  if (ids.length === 0) return;
+  const meId = model.me?.nodeId;
+  if (meId && analysis.cutVertices.has(meId)) {
+    toast('If you drop, the network splits. Link to a peer on the other side to add a second path.', 'info');
+    return;
+  }
+  weakCursor = (weakCursor + 1) % ids.length;
+  const id = ids[weakCursor] as string;
+  focusPlayerNode(id);
+  toast(`${model.nodes.get(id)?.name ?? 'This node'} is a weak point: if it drops, the network splits.`, 'info');
+});
+
+function syncToggles(): void {
+  el.toggleWeak.classList.toggle('on', radarOn);
+  el.toggleWeak.setAttribute('aria-pressed', String(radarOn));
+  el.toggleSound.classList.toggle('on', !sfx.isMuted);
+  el.toggleSound.setAttribute('aria-pressed', String(!sfx.isMuted));
+}
+el.toggleWeak.addEventListener('click', () => {
+  radarOn = !radarOn;
+  try { localStorage.setItem('mng.radar', radarOn ? '1' : '0'); } catch { /* cosmetic */ }
+  syncToggles();
+});
+el.toggleSound.addEventListener('click', () => {
+  sfx.unlock();
+  sfx.setMuted(!sfx.isMuted);
+  syncToggles();
+  if (!sfx.isMuted) sfx.link();
+});
+window.addEventListener('pointerdown', () => sfx.unlock(), { passive: true });
+window.addEventListener('keydown', () => sfx.unlock(), { passive: true });
+syncToggles();
+
+>>>>>>> origin/prince
 // ---------------------------------------------------------------------------
 // Request UI
 // ---------------------------------------------------------------------------
@@ -1187,6 +1576,10 @@ function requestConnection(targetId: string): void {
     renderTargetBar();
     toast('Could not confirm, try again', 'bad');
   }, 8000);
+<<<<<<< HEAD
+=======
+  sfx.unlock();
+>>>>>>> origin/prince
   if (!send({ type: 'request_link', targetNodeId: targetId })) {
     window.clearTimeout(requestSendTimer);
     requestSendTimer = 0;
@@ -1683,6 +2076,12 @@ function tokenRemainingMs(): number {
 
 function updateHud(): void {
   document.body.dataset.phase = model.phase;
+<<<<<<< HEAD
+=======
+  document.body.classList.toggle('warnPulse', model.phase === 'warning');
+  document.body.classList.toggle('recoverFlash', Date.now() < recoverFlashUntil);
+  refreshIntegrity();
+>>>>>>> origin/prince
   el.phase.textContent = PHASE_LABEL[model.phase] ?? model.phase;
   el.countdown.textContent = `${(remainingMs() / 1000).toFixed(1)}s`;
   el.score.textContent = model.lastScore ? model.lastScore.score.toFixed(1) : '—';
@@ -1798,6 +2197,10 @@ function frame(timestamp: number): void {
 
   updateKeyboardMovement(dt);
   smoothPositions(dt);
+<<<<<<< HEAD
+=======
+  fx.update(dt);
+>>>>>>> origin/prince
   const now = Date.now();
   for (const [id, expiresAt] of linkPulses) if (expiresAt <= now) linkPulses.delete(id);
   document.body.classList.toggle('outageFlash', now < outageFlashUntil);
@@ -1855,8 +2258,21 @@ function frame(timestamp: number): void {
     }
   }
 
+<<<<<<< HEAD
   drawBoard({
     ctx,
+=======
+  ctx.clearRect(0, 0, window.innerWidth, window.innerHeight);
+  const shake = fx.offset(now);
+  ctx.save();
+  ctx.translate(shake.x, shake.y);
+  drawBoard({
+    ctx,
+    backdrop: (c) => fx.drawBackdrop(c, window.innerWidth, window.innerHeight),
+    weakIds: radarOn && model.phase !== 'result' ? analysis.cutVertices : undefined,
+    hubIds: radarOn && model.phase === 'warning' ? analysis.hubIds : undefined,
+    flow: true,
+>>>>>>> origin/prince
     nodes: model.nodes,
     links: model.links,
     positions: model.visual,
@@ -1880,6 +2296,11 @@ function frame(timestamp: number): void {
     highlightUntil,
     worldRadius: model.config?.movement.worldRadius ?? 1400,
   });
+<<<<<<< HEAD
+=======
+  fx.drawOverlay(ctx, camera);
+  ctx.restore();
+>>>>>>> origin/prince
   requestAnimationFrame(frame);
 }
 requestAnimationFrame(frame);

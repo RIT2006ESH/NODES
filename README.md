@@ -43,6 +43,44 @@ Device-motion controls are intentionally **not** implemented. Pointer drag and
 keyboard are the supported movement inputs, so a browser motion-permission prompt
 is never required. See `docs/STATUS.md` for what was and was not browser-tested.
 
+<<<<<<< HEAD
+=======
+## Gameplay layer (client-side, rules untouched)
+
+A cosmetic and strategic layer that makes each round readable and more tense
+without changing a single engine rule, scoring weight or protocol message.
+
+- **Weak-point radar.** Amber dashed rings mark nodes whose loss would split the
+  largest group (articulation points, the same thing the PRD 6.6 redundancy term
+  penalises). The HUD shows a live **integrity** figure (reach + redundancy,
+  before the speed bonus) and a chip: `⚠ 3 weak points` cycles the camera through
+  them, `⚠ you're a weak point` tells you to add a second path, and
+  `✓ no weak points` means one lost node can no longer split the network. Toggle
+  it with the **Radar** button.
+- **Hub-strike reticle.** During Warning, the highest-degree nodes get a red
+  reticle: that is exactly what a Hub strike hunts.
+- **Impact and recovery effects.** Shockwaves, particle bursts and screen shake
+  on outages and cable cuts; mint recovery waves when Result restores the network;
+  gold "ROUTE RESTORED" bursts when a Repair link merges two groups; an ambient
+  data-packet flow along live links so a healthy network visibly hums. Honors
+  `prefers-reduced-motion`.
+- **Sound.** Synthesized with WebAudio (no assets): warning siren, strike thud,
+  repair chimes, link blips, grade fanfares. Starts on your first tap or key;
+  mute with the **Sound** button (remembered).
+- **Result card.** At the end of each round: grade (S/A/B/C/D), animated score,
+  Reach / Redundancy / Speed bars and a one-line coaching tip about what cost
+  you the most.
+- **Rank and achievements.** XP, ranks (Packet to Architect) and nine
+  achievements, saved in `localStorage` on the device. Cosmetic only: no gameplay
+  effect, no server state. Tap the rank chip to see the list.
+
+Code: `apps/web/src/insight.ts` (pure analysis, grades, progression),
+`apps/web/src/fx.ts` (particles, shake, audio), overlay drawing in `render.ts`,
+wiring in `main.ts`. The weak-point finder is cross-checked in
+`apps/web/test/insight.test.ts` against brute-force vertex removal and the
+engine's own `articulationPoints`.
+
+>>>>>>> origin/prince
 ## Search and contribution leaderboard
 
 Search covers every node in the current Line, not just the viewport. It shows
@@ -119,7 +157,11 @@ the platform dashboard. `.env` files are git-ignored.
 
 | Command | What it does |
 |---|---|
+<<<<<<< HEAD
 | `npm test` | 115 tests: engine, golden cases, consent flow, search/ranking, geometry, real-WebSocket server tests |
+=======
+| `npm test` | 138+ tests: engine, golden cases, consent flow, search/ranking, geometry, real-WebSocket server tests |
+>>>>>>> origin/prince
 | `npm run typecheck` | `tsc --noEmit` across engine, protocol, server, client and tools |
 | `npm run build` | Production client bundle |
 | `npm start` | Production server (serves `apps/web/dist`) |

@@ -168,3 +168,67 @@ body.screen #hud,body.screen #join,body.screen .gameControls,body.screen #hint,b
   .playerCard { left:12px !important; right:12px; bottom:calc(166px + env(safe-area-inset-bottom, 0px)); top:auto !important; width:auto; max-height:38vh; overflow:auto; }
   .learnPanel { z-index:45; }
 }
+<<<<<<< HEAD
+=======
+
+/* ------------------------------------------------------------------------
+   Gameplay layer: integrity readout, weak-point chip, rank, result card, FX.
+   Cosmetic/strategic only; none of this changes a game rule.
+   ------------------------------------------------------------------------ */
+.integrityMetric b { color:var(--mint); }
+.integrityMetric b.low { color:var(--amber); } .integrityMetric b.crit { color:var(--red); }
+.weakChip { pointer-events:auto; align-self:flex-start; min-height:20px; padding:1px 7px; border:1px solid rgba(255,198,109,.45); border-radius:999px; background:rgba(255,198,109,.08); color:var(--amber); font:inherit; font-size:9px; cursor:pointer; touch-action:manipulation; white-space:nowrap; }
+.weakChip:hover { background:rgba(255,198,109,.18); }
+.weakChip.me { border-color:rgba(255,102,125,.6); color:#ffb3bf; background:rgba(255,102,125,.12); animation:chipPulse 1.1s ease-in-out infinite; }
+.weakChip.safe { border-color:rgba(130,232,204,.4); color:var(--mint); background:rgba(130,232,204,.08); cursor:default; }
+@keyframes chipPulse { 50% { box-shadow:0 0 14px rgba(255,102,125,.45); } }
+body.screen .integrityMetric .weakChip { display:none; }
+
+.fxRow { display:flex; gap:8px; }
+.gameControls .fxRow .fxToggle { flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:1px; min-height:44px; padding:4px; border:1px solid var(--border); border-radius:9px; background:rgba(16,24,39,.82); color:var(--muted); font:inherit; font-size:15px; line-height:1; cursor:pointer; }
+.gameControls .fxRow .fxToggle small { font-size:8px; letter-spacing:.5px; text-transform:uppercase; }
+.gameControls .fxRow .fxToggle.on { color:var(--amber); border-color:rgba(255,198,109,.4); }
+.gameControls .fxRow .fxToggle:hover { border-color:var(--cyan); }
+
+.operator { position:fixed; z-index:6; left:24px; bottom:calc(52px + env(safe-area-inset-bottom, 0px)); display:flex; align-items:center; gap:9px; min-height:44px; padding:5px 12px 5px 6px; border:1px solid var(--border); border-radius:12px; background:rgba(11,17,32,.78); color:var(--text); font:inherit; text-align:left; cursor:pointer; backdrop-filter:blur(10px); touch-action:manipulation; }
+.operator[hidden] { display:none; } .operator:hover { border-color:rgba(105,213,255,.45); }
+.opLevel { display:grid; place-items:center; width:30px; height:30px; border-radius:9px; background:linear-gradient(135deg,var(--mint),var(--cyan)); color:#07111a; font-size:13px; font-weight:800; }
+.opBody { display:flex; flex-direction:column; gap:2px; min-width:92px; } .opBody b { font-size:11px; letter-spacing:.3px; } .opBody small { color:var(--muted); font-size:9px; font-variant-numeric:tabular-nums; }
+.opTrack { display:block; height:3px; border-radius:3px; background:rgba(105,213,255,.14); overflow:hidden; } .opTrack u { display:block; height:100%; width:0; background:var(--cyan); border-radius:3px; transition:width .5s ease; text-decoration:none; }
+body.screen .operator, body.screen .fxRow { display:none; }
+#outgoing { bottom:calc(108px + env(safe-area-inset-bottom, 0px)); }
+
+.achievements { position:fixed; z-index:36; left:24px; bottom:calc(104px + env(safe-area-inset-bottom, 0px)); width:min(300px,calc(100vw - 24px)); max-height:52vh; overflow:auto; padding:12px; border:1px solid rgba(105,213,255,.3); border-radius:13px; background:rgba(16,24,39,.97); box-shadow:0 18px 55px rgba(0,0,0,.58); }
+.achievements[hidden] { display:none; }
+.achHead { display:flex; justify-content:space-between; align-items:baseline; margin-bottom:8px; color:var(--cyan); font-size:9px; letter-spacing:1px; } .achHead span { color:var(--muted); }
+.achRow { display:flex; gap:9px; padding:7px 4px; border-top:1px solid var(--border); opacity:.45; } .achRow.done { opacity:1; }
+.achMark { flex:0 0 18px; height:18px; display:grid; place-items:center; border-radius:50%; border:1px solid var(--border); color:var(--muted); font-size:10px; } .achRow.done .achMark { border-color:var(--mint); color:var(--mint); box-shadow:0 0 8px rgba(130,232,204,.4); }
+.achRow b { display:block; font-size:11px; } .achRow small { color:var(--muted); font-size:9.5px; line-height:1.35; }
+
+.resultCard { position:fixed; z-index:27; left:50%; top:34%; transform:translate(-50%,-50%); width:min(340px,calc(100vw - 24px)); padding:20px 22px 18px; border:1px solid rgba(130,232,204,.4); border-radius:18px; background:rgba(11,17,32,.94); box-shadow:0 28px 90px rgba(0,0,0,.65),0 0 60px rgba(70,141,255,.16); text-align:center; pointer-events:none; animation:resultIn .45s cubic-bezier(.2,1.2,.3,1); }
+.resultCard[hidden] { display:none; }
+@keyframes resultIn { from { opacity:0; transform:translate(-50%,-44%) scale(.86); } to { opacity:1; transform:translate(-50%,-50%) scale(1); } }
+.resultEyebrow { color:var(--cyan); font-size:9px; letter-spacing:1.4px; text-transform:uppercase; }
+.resultGrade { margin:4px 0 0; font-size:78px; line-height:1; font-weight:800; letter-spacing:-2px; }
+.resultGrade.g-S { color:#ffe08a; text-shadow:0 0 30px rgba(255,224,138,.55); } .resultGrade.g-A { color:var(--mint); text-shadow:0 0 26px rgba(130,232,204,.45); } .resultGrade.g-B { color:var(--cyan); } .resultGrade.g-C { color:var(--amber); } .resultGrade.g-D { color:var(--red); }
+.resultScore { margin:2px 0 12px; color:var(--text); font-size:13px; font-variant-numeric:tabular-nums; } .resultScore small { color:var(--muted); }
+.resultBars { display:grid; gap:7px; text-align:left; } .resultBar { display:grid; grid-template-columns:62px 1fr 34px; gap:8px; align-items:center; color:var(--muted); font-size:9.5px; } .resultBar i { height:5px; border-radius:5px; background:rgba(105,213,255,.13); overflow:hidden; } .resultBar u { display:block; height:100%; width:0; border-radius:5px; background:var(--cyan); text-decoration:none; transition:width .9s cubic-bezier(.2,.8,.2,1); } .resultBar:nth-child(2) u { background:var(--mint); } .resultBar:nth-child(3) u { background:var(--amber); } .resultBar span:last-child { color:var(--text); text-align:right; font-variant-numeric:tabular-nums; }
+.resultFoot { margin-top:12px; color:var(--muted); font-size:10px; line-height:1.4; } .resultFoot b { color:var(--mint); }
+
+body.warnPulse::after { box-shadow:inset 0 0 130px rgba(255,198,109,.28); animation:warnBeat 1s ease-in-out infinite; }
+@keyframes warnBeat { 50% { opacity:.4; } }
+body.recoverFlash::after { box-shadow:inset 0 0 130px rgba(130,232,204,.3); animation:outageVignette .9s ease-out; }
+
+@media (max-width:560px) { .brandCopy { display:none; } .integrityMetric { min-width:44px; } }
+@media (max-width:720px) {
+  .operator { left:12px; bottom:calc(46px + env(safe-area-inset-bottom, 0px)); }
+  .opBody { min-width:70px; }
+  #outgoing { bottom:calc(100px + env(safe-area-inset-bottom, 0px)); }
+  .achievements { left:12px; bottom:calc(98px + env(safe-area-inset-bottom, 0px)); }
+  #leaderboard, #leaderboard:not(.collapsed) { bottom:calc(224px + env(safe-area-inset-bottom, 0px)); }
+  #requestBar { bottom:calc(218px + env(safe-area-inset-bottom, 0px)); }
+  .playerCard { bottom:calc(218px + env(safe-area-inset-bottom, 0px)); }
+  .resultCard { top:30%; }
+  .resultGrade { font-size:64px; }
+}
+>>>>>>> origin/prince

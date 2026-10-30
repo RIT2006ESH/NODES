@@ -20,6 +20,10 @@
         <div class="metric phaseMetric"><span class="metricLabel">phase</span><b id="phase">seeding</b><small id="countdown">—</small></div>
         <div class="metric"><span class="metricLabel">last score</span><b id="score">—</b></div>
         <div class="metric healthMetric"><span class="metricLabel">network health</span><b id="health">—</b><span class="healthTrack"><i></i></span></div>
+<<<<<<< HEAD
+=======
+        <div class="metric integrityMetric" title="Live preview of reach and redundancy, before the speed bonus"><span class="metricLabel">integrity</span><b id="integrity">—</b><button id="weakChip" type="button" class="weakChip" hidden></button></div>
+>>>>>>> origin/prince
       </div>
       <div class="tokens" id="tokens" title="Link tokens">
         <span class="tokenLabel">LINK TOKENS</span>
@@ -66,12 +70,28 @@
     </aside>
 
     <div class="worldTag"><span></span> SHARED WORLD <b id="worldCount">—</b></div>
+<<<<<<< HEAD
+=======
+    <button id="operator" class="operator" type="button" title="Your rank on this device. Cosmetic only." hidden>
+      <span class="opLevel" id="opLevel">1</span>
+      <span class="opBody"><b id="opTitle">Packet</b><small id="opXp">0 XP</small><i class="opTrack"><u id="opBar"></u></i></span>
+    </button>
+    <aside id="resultCard" class="resultCard" hidden role="status" aria-live="polite"></aside>
+    <div id="achievements" class="achievements" hidden role="dialog" aria-label="Achievements"></div>
+>>>>>>> origin/prince
     <aside id="activityFeed" class="activityFeed" aria-label="Live network activity" aria-live="polite"><div class="activityTitle">LIVE ACTIVITY</div><div id="activityItems"></div></aside>
     <div id="hint"><kbd>WASD</kbd> Move your node <span>·</span> Select a player to connect</div>
     <div class="gameControls" aria-label="Game controls">
       <button id="pingNetwork" class="pingNetwork" type="button">◌ PING NETWORK</button>
       <button id="learnLibp2p" class="learnLink" type="button">◈ Learn libp2p</button>
       <button id="findMe" type="button"><span aria-hidden="true">⌖</span> Find my node</button>
+<<<<<<< HEAD
+=======
+      <div class="fxRow">
+        <button id="toggleWeak" type="button" class="fxToggle on" aria-pressed="true" title="Weak-point radar: nodes whose loss would split the network"><span aria-hidden="true">◬</span><small>Radar</small></button>
+        <button id="toggleSound" type="button" class="fxToggle" aria-pressed="false" title="Sound effects"><span aria-hidden="true">♪</span><small>Sound</small></button>
+      </div>
+>>>>>>> origin/prince
     </div>
     <aside id="pulseResult" class="pulseResult" hidden role="status" aria-live="polite"></aside>
     <aside id="failurePreview" class="failurePreview" hidden role="status" aria-live="polite"></aside>
