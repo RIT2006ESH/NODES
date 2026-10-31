@@ -8,3 +8,5 @@ reports/
 *.log
 
 tools/bin/
+
+supabase/.temp/
