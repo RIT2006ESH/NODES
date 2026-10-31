@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import { WebSocket } from 'ws';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { loadDefaultConfig, type GameConfig } from '@mng/config';
-import type { ClientMessage, ServerMessage, SnapshotView } from '@mng/protocol';
+import type { ClientMessage, ServerMessage, SnapshotMessage, WelcomeMessage } from '@mng/protocol';
 import { createGameServer } from '../src/app.js';
 import type { GameServer } from '../src/app.js';
 import { buildLeaderboard, searchPlayers } from '../../web/src/community.js';
@@ -63,7 +63,7 @@ class TestClient {
   }
 
   async tryJoin(name: string): Promise<
-    | { ok: true; token: string; nodeId: string; snapshot: SnapshotView }
+    | { ok: true; token: string; nodeId: string; snapshot: SnapshotMessage }
     | { ok: false; code: string }
   > {
     this.send({ type: 'join', name });
@@ -72,7 +72,7 @@ class TestClient {
       return { ok: false, code: msg.code };
     }
     const snap = (await this.wait((m) => m.type === 'snapshot')) as Extract<ServerMessage, { type: 'snapshot' }>;
-    return { ok: true, token: msg.token, nodeId: snap.you.nodeId!, snapshot: snap };
+    return { ok: true, token: (msg as WelcomeMessage).token, nodeId: snap.you.nodeId!, snapshot: snap };
   }
 
   close(): void {
@@ -185,8 +185,9 @@ describe('Globally unique player usernames', () => {
 
     expect(successes).toHaveLength(1);
     expect(rejections).toHaveLength(1);
-    if (!rejections[0].ok) {
-      expect(rejections[0].code).toBe('USERNAME_TAKEN');
+    const rej = rejections[0];
+    if (rej && !rej.ok) {
+      expect(rej.code).toBe('USERNAME_TAKEN');
     }
     c1.close();
     c2.close();

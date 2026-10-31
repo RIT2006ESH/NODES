@@ -67,6 +67,7 @@ const el = {
   toasts: document.getElementById('toasts') as HTMLElement,
   join: document.getElementById('join') as HTMLElement,
   name: document.getElementById('name') as HTMLInputElement,
+  nameWarning: document.getElementById('nameWarning') as HTMLElement,
   play: document.getElementById('play') as HTMLButtonElement,
   requests: document.getElementById('requests') as HTMLElement,
   outgoing: document.getElementById('outgoing') as HTMLElement,
@@ -428,6 +429,21 @@ function handleMessage(message: ServerMessage): void {
   }
 }
 
+
+function showNameWarning(text: string): void {
+  if (el.nameWarning) {
+    el.nameWarning.textContent = text;
+    el.nameWarning.hidden = false;
+  }
+}
+
+function clearNameWarning(): void {
+  if (el.nameWarning) {
+    el.nameWarning.textContent = '';
+    el.nameWarning.hidden = true;
+  }
+}
+
 function handleError(code: string): void {
   el.play.disabled = false;
   if (code === 'RESET') {
@@ -476,10 +492,21 @@ function handleError(code: string): void {
   }
   if (code === 'BAD_TEAM_NAME') {
     toast('Team names must be 3-24 valid characters', 'bad');
+    el.teamNameDialog.hidden = false;
     return;
   }
   if (code === 'TEAM_NAME_TAKEN') {
     toast('That team name is already in use', 'bad');
+    el.teamNameDialog.hidden = false;
+    return;
+  }
+  if (code === 'NOT_TEAM_LEADER') {
+    toast('Only the mesh leader can set or rename the team', 'bad');
+    return;
+  }
+  if (code === 'TEAM_NAME_LOOKUP_FAILED') {
+    toast('Could not verify team name availability, please try again', 'bad');
+    el.teamNameDialog.hidden = false;
     return;
   }
   if (code === 'TEAM_NOT_FOUND') {
@@ -488,12 +515,14 @@ function handleError(code: string): void {
   }
   if (code === 'USERNAME_TAKEN') {
     showJoin();
+    showNameWarning('⚠️ That username is already taken. Please choose another.');
     toast('That username is already taken. Please choose another.', 'bad');
     el.name.focus();
     return;
   }
   if (code === 'INVALID_USERNAME') {
     showJoin();
+    showNameWarning('⚠️ Usernames must be 3-20 letters, numbers, or underscores.');
     toast('Usernames must be 3-20 letters, numbers, or underscores.', 'bad');
     el.name.focus();
     return;
@@ -1688,8 +1717,17 @@ el.requestCancel.addEventListener('click', cancelSelection);
 el.learnLibp2p.addEventListener('click', () => { el.learnPanel.hidden = false; el.learnClose.focus(); });
 el.learnClose.addEventListener('click', () => { el.learnPanel.hidden = true; });
 el.learnPanel.addEventListener('click', (event) => { if (event.target === el.learnPanel) el.learnPanel.hidden = true; });
+el.teamNameInput.addEventListener('keydown', (event) => {
+  if (event.key === 'Enter') {
+    event.preventDefault();
+    el.teamNameSave.click();
+  }
+});
+
 el.teamNameSave.addEventListener('click', () => {
-  const team = model.teams.find((entry) => entry.teamId === promptedTeamId);
+  const team = model.teams.find((entry) => entry.teamId === promptedTeamId)
+    ?? model.teams.find((entry) => entry.memberNodeIds.includes(model.me?.nodeId ?? ''))
+    ?? model.teams[0];
   const name = el.teamNameInput.value.trim();
   if (!team || !name) { toast('Choose a team name', 'bad'); return; }
   if (name.length < 3 || name.length > 24) { toast('Team names must be 3-24 characters', 'bad'); return; }
@@ -2045,6 +2083,7 @@ window.addEventListener('blur', () => {
 
 
 el.play.addEventListener('click', () => {
+  clearNameWarning();
   el.play.disabled = true;
   const name = el.name.value.trim();
   connect();
@@ -2061,6 +2100,8 @@ el.play.addEventListener('click', () => {
     window.setTimeout(() => window.clearInterval(wait), 8000);
   }
 });
+
+el.name.addEventListener('input', () => { clearNameWarning(); });
 
 el.name.addEventListener('keydown', (event) => {
   if (event.key === 'Enter') el.play.click();

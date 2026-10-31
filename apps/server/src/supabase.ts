@@ -66,13 +66,14 @@ export function createSupabaseStore(): SupabaseStore | null {
     return data as T;
   }
 
-  async function saveUsername(nodeId: string, username: string, upsert: boolean): Promise<{ ok: true; profile: ProfileRow } | { ok: false; code: string }> {
+  async function saveUsername(nodeId: string, username: string): Promise<{ ok: true; profile: ProfileRow } | { ok: false; code: string }> {
     const valid = validateUsername(username);
     if (!valid) return { ok: false, code: 'INVALID_USERNAME' };
-    const operation = upsert
-      ? client.from('player_profiles').upsert({ node_id: nodeId, username: valid }, { onConflict: 'node_id' }).select('node_id,username').single()
-      : client.from('player_profiles').insert({ node_id: nodeId, username: valid }).select('node_id,username').single();
-    const { data, error } = await operation;
+    const { data, error } = await client
+      .from('player_profiles')
+      .upsert({ node_id: nodeId, username: valid }, { onConflict: 'node_id' })
+      .select('node_id,username')
+      .single();
     if (error) {
       if (error.code === '23505') return { ok: false, code: 'USERNAME_TAKEN' };
       throw error;
@@ -88,8 +89,8 @@ export function createSupabaseStore(): SupabaseStore | null {
     getProfile,
     getProfileByUsername,
     getTeamByName,
-    registerUsername: (nodeId, username) => saveUsername(nodeId, username, false),
-    updateUsername: (nodeId, username) => saveUsername(nodeId, username, true),
+    registerUsername: (nodeId, username) => saveUsername(nodeId, username),
+    updateUsername: (nodeId, username) => saveUsername(nodeId, username),
     async syncTeams(teams) {
       for (const team of teams) {
         for (const nodeId of team.memberNodeIds) {

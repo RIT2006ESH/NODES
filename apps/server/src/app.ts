@@ -140,12 +140,15 @@ export async function createGameServer(options: GameServerOptions = {}): Promise
   const configuredOfflineTimeout = Number(process.env.NODE_OFFLINE_TIMEOUT_MS);
   const offlineTimeoutMs = options.offlineTimeoutMs ?? (Number.isFinite(configuredOfflineTimeout) && configuredOfflineTimeout > 0 ? configuredOfflineTimeout : 10_000);
   const seed = options.seed ?? (Number(process.env.SEED) || (clock() >>> 0));
-  const smokeBaseUrl = process.env.SMOKE_BASE_URL?.replace(/\/+$/, '');
-  const smokeInternalSecret = process.env.SMOKE_INTERNAL_API_SECRET;
+  const smokeBaseUrl = process.env.SMOKE_BASE_URL?.replace(/\/+$/, '') ?? 'http://localhost:10001';
+  const smokeInternalSecret = process.env.SMOKE_INTERNAL_API_SECRET ?? 'local-only-change-me';
+  const defaultPrivateKeyPath = join(dataDir, 'smoke-nodes-private.pem');
   const nodesJwtPrivateKey = process.env.NODES_JWT_PRIVATE_KEY
     ?? (process.env.NODES_JWT_PRIVATE_KEY_FILE && existsSync(process.env.NODES_JWT_PRIVATE_KEY_FILE)
       ? readFileSync(process.env.NODES_JWT_PRIVATE_KEY_FILE, 'utf8')
-      : undefined);
+      : existsSync(defaultPrivateKeyPath)
+        ? readFileSync(defaultPrivateKeyPath, 'utf8')
+        : undefined);
   const nodesJwtIssuer = process.env.NODES_JWT_ISSUER ?? 'nodes';
   const nodesJwtAudience = process.env.NODES_JWT_AUDIENCE ?? 'smoke-room';
 
@@ -263,17 +266,37 @@ export async function createGameServer(options: GameServerOptions = {}): Promise
     for (const members of components) {
       const area = areas.get(members[0]!) ?? 'main';
       const activeLinks = Object.values(line.state.links).filter((link) => !link.cut && members.includes(link.a) && members.includes(link.b) && (areas.get(link.a) ?? 'main') === area && (areas.get(link.b) ?? 'main') === area).length;
+      const targetTeamId = `team_${members.join('_')}`;
       const candidates = [...teamRecords.entries()]
         .filter(([id, record]) => !used.has(id) && record.memberNodeIds.some((id) => members.includes(id)))
-        .sort((a, b) => b[1].memberNodeIds.length - a[1].memberNodeIds.length || a[1].createdAt - b[1].createdAt || a[0].localeCompare(b[0]));
+        .sort((a, b) => {
+          const aExact = a[0] === targetTeamId ? 1 : 0;
+          const bExact = b[0] === targetTeamId ? 1 : 0;
+          if (aExact !== bExact) return bExact - aExact;
+
+          const aOverlap = a[1].memberNodeIds.filter((id) => members.includes(id)).length;
+          const bOverlap = b[1].memberNodeIds.filter((id) => members.includes(id)).length;
+          if (aOverlap !== bOverlap) return bOverlap - aOverlap;
+
+          const aHasName = a[1].name !== null ? 1 : 0;
+          const bHasName = b[1].name !== null ? 1 : 0;
+          if (aHasName !== bHasName) return bHasName - aHasName;
+
+          return b[1].memberNodeIds.length - a[1].memberNodeIds.length || a[1].createdAt - b[1].createdAt || a[0].localeCompare(b[0]);
+        });
       const inherited = candidates[0]?.[1];
-      const teamId = candidates[0]?.[0] ?? `team_${members.join('_')}`;
+      const teamId = candidates[0]?.[0] ?? targetTeamId;
       const prior = inherited;
       const leaderNodeId = prior?.leaderNodeId && members.includes(prior.leaderNodeId) ? prior.leaderNodeId : prior?.nameOwnerNodeId && members.includes(prior.nameOwnerNodeId) ? prior.nameOwnerNodeId : members[0]!;
       const memberJoinedAt = Object.fromEntries(members.map((id) => [id, prior?.memberJoinedAt[id] ?? line.state.nodes[id]!.createdAt]));
       const record: TeamRecord = { name: prior?.name ?? null, description: prior?.description ?? null, leaderNodeId, nameOwnerNodeId: prior?.nameOwnerNodeId ?? null, memberNodeIds: members, memberJoinedAt, createdAt: prior?.createdAt ?? now, area, qualification: prior?.qualification ?? 'ineligible', recoveries: prior?.recoveries ?? 0, activeLinks };
       if (candidates[0]) used.add(candidates[0][0]);
       next.set(teamId, record);
+    }
+    for (const [id, record] of teamRecords) {
+      if (!next.has(id) && record.memberNodeIds.every((mId) => active.has(mId))) {
+        next.set(id, { ...record, activeLinks: 0 });
+      }
     }
     teamRecords.clear();
     for (const [id, record] of next) teamRecords.set(id, record);
@@ -712,8 +735,9 @@ export async function createGameServer(options: GameServerOptions = {}): Promise
         }
 
         session.name = valid;
-        if (line.state.nodes[session.nodeId]) {
-          line.state.nodes[session.nodeId].name = valid;
+        const existingNode = line.state.nodes[session.nodeId];
+        if (existingNode) {
+          line.state.nodes[session.nodeId] = { ...existingNode, name: valid };
         }
         saveSessions();
         broadcastSnapshot();
@@ -1028,32 +1052,28 @@ export async function createGameServer(options: GameServerOptions = {}): Promise
       return;
     }
 
-    const name = rawName.replace(/[\u0000-\u001f\u007f]/g, '').trim();
-    if (!/^[\p{L}\p{N}][\p{L}\p{N} _-]{1,22}[\p{L}\p{N}]$/u.test(name)) {
-      send(ws, { type: 'error', code: 'BAD_TEAM_NAME', message: 'Team names must be 3-24 letters, numbers, spaces, hyphens or underscores.' });
-      return;
-    }
-
-    if (name.length > 24) {
+    const name = rawName.replace(/[\u0000-\u001f\u007f]/g, '').trim().replace(/\s+/g, ' ');
+    if (name.length < 3 || name.length > 24) {
       send(ws, { type: 'error', code: 'BAD_TEAM_NAME', message: 'Team names must be 3-24 characters.' });
       return;
     }
+    if (!/^[\p{L}\p{N}][\p{L}\p{N}\s_\-'.&!]{1,22}[\p{L}\p{N}.!]$/u.test(name)) {
+      send(ws, { type: 'error', code: 'BAD_TEAM_NAME', message: 'Team names must be 3-24 valid characters.' });
+      return;
+    }
+
     const description = typeof rawDescription === 'string'
       ? rawDescription.replace(/[\u0000-\u001f\u007f]/g, '').trim().slice(0, 160)
       : '';
     const teams = currentTeams(now);
-    const team = teams.find((entry) => entry.teamId === rawTeamId);
-    if (!team || team.leaderNodeId !== client.nodeId) {
-      send(ws, { type: 'error', code: 'TEAM_NOT_FOUND' });
-      return;
-    }
-    const record = teamRecords.get(team.teamId);
-    if (!record) {
+    let team = teams.find((entry) => entry.teamId === rawTeamId);
+    const record = team ? teamRecords.get(team.teamId) : teamRecords.get(rawTeamId);
+    if (!record || record.leaderNodeId !== client.nodeId) {
       send(ws, { type: 'error', code: 'TEAM_NOT_FOUND' });
       return;
     }
     const duplicate = teams.some((entry) =>
-      entry.teamId !== team.teamId &&
+      entry.teamId !== rawTeamId &&
       entry.name !== null &&
       entry.name.localeCompare(name, undefined, { sensitivity: 'accent' }) === 0,
     );
@@ -1064,24 +1084,22 @@ export async function createGameServer(options: GameServerOptions = {}): Promise
     if (supabase) {
       try {
         const existing = await supabase.getTeamByName(name);
-        if (existing && existing.team_id !== team.teamId) {
+        if (existing && existing.team_id !== rawTeamId) {
           send(ws, { type: 'error', code: 'TEAM_NAME_TAKEN' });
           return;
         }
       } catch {
-        send(ws, { type: 'error', code: 'TEAM_NAME_LOOKUP_FAILED' });
-        return;
+        // best-effort Supabase verification: do not block local renaming if Supabase is temporarily unreachable
       }
     }
-    if (record.name === null || record.leaderNodeId === client.nodeId) {
-      record.name = sanitizeName(name);
-      record.description = description || null;
-      saveTeamState();
-      syncSmoke(`/api/v1/internal/rooms/${encodeURIComponent(team.roomId)}/team`, {
-        teamId: team.teamId, teamName: record.name,
-      }, `team:${team.teamId}:${record.name}:${now}`);
-      broadcastSnapshot();
-    }
+    record.name = name;
+    record.nameOwnerNodeId = client.nodeId;
+    record.description = description || null;
+    saveTeamState();
+    syncSmoke(`/api/v1/internal/rooms/${encodeURIComponent(team?.roomId ?? rawTeamId)}/team`, {
+      teamId: rawTeamId, teamName: record.name,
+    }, `team:${rawTeamId}:${record.name}:${now}`);
+    broadcastSnapshot();
   }
 
   function handleSmokeInvite(ws: WebSocket, client: ClientConnection, rawTeamId: unknown, now: number): void {
