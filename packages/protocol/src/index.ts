@@ -104,6 +104,7 @@ export interface YouView {
   readonly nextTokenInMs: number;
   readonly restoredRoutes: number;
   readonly offline: boolean;
+  readonly networkStatus: 'connected' | 'disconnected';
 }
 
 export interface ScoreView {
@@ -125,6 +126,13 @@ export interface StatsView {
 export interface TeamView {
   readonly teamId: string;
   readonly name: string | null;
+  readonly description?: string | null;
+  /** The first accepted requester that established this mesh. */
+  readonly leaderNodeId: string | null;
+  /** Only this member is prompted to name a newly formed team. */
+  readonly nameOwnerNodeId: string | null;
+  /** Stable room key for a future authenticated Smoke Room integration. */
+  readonly roomId: string;
   readonly memberNodeIds: readonly string[];
   readonly createdAt: number;
   readonly area: 'main' | 'surprise';
@@ -175,7 +183,8 @@ export interface WireEvent {
 
 export type ClientMessage =
   | { type: 'join'; name: string }
-  | { type: 'team_name'; teamId: string; name: string }
+  | { type: 'team_name'; teamId: string; name: string; description?: string }
+  | { type: 'smoke_invite'; teamId: string }
   | { type: 'request_link'; targetNodeId: string }
   | { type: 'respond_link'; requestId: string; accept: boolean }
   | { type: 'move'; x: number; y: number }
@@ -260,6 +269,25 @@ export interface PongMessage {
   readonly serverNow: number;
 }
 
+export type MeshEvent =
+  | { type: 'node.offline'; nodeId: string; name: string; teamId: string | null }
+  | { type: 'mesh.member_removed'; nodeId: string; name: string; teamId: string }
+  | { type: 'mesh.leader_changed'; teamId: string; previousLeaderNodeId: string; previousLeaderName: string; leaderNodeId: string; leaderName: string };
+
+export interface MeshEventMessage {
+  readonly type: 'mesh_event';
+  readonly event: MeshEvent;
+}
+
+export interface SmokeInviteMessage {
+  readonly type: 'smoke_invite';
+  readonly teamId: string;
+  readonly roomId: string;
+  readonly teamName: string;
+  readonly fromNodeId: string;
+  readonly fromName: string;
+}
+
 export type ServerMessage =
   | WelcomeMessage
   | SnapshotMessage
@@ -268,4 +296,6 @@ export type ServerMessage =
   | LinkRequestMessage
   | LinkRequestResultMessage
   | ErrorMessage
-  | PongMessage;
+  | PongMessage
+  | MeshEventMessage
+  | SmokeInviteMessage;

@@ -24,8 +24,6 @@ import {
   type TeamView,
 } from '@mng/protocol';
 import { drawBoard, fitCamera, pickNode, toWorld, type Camera, type PendingLink } from './render';
-<<<<<<< HEAD
-=======
 import { Fx, Sfx } from './fx';
 import {
   ACHIEVEMENTS,
@@ -39,7 +37,6 @@ import {
   type Analysis,
   type ProgressEvent,
 } from './insight';
->>>>>>> origin/prince
 import {
   buildLeaderboard,
   RELATION_LABEL,
@@ -89,8 +86,14 @@ const el = {
   lbList: document.getElementById('lbList') as HTMLOListElement,
   teamList: document.getElementById('teamList') as HTMLElement,
   teamGroupCount: document.getElementById('teamGroupCount') as HTMLElement,
+  smokeRoomStatus: document.getElementById('smokeRoomStatus') as HTMLElement,
+  smokeRoomDetails: document.getElementById('smokeRoomDetails') as HTMLElement,
+  openSmokeRoom: document.getElementById('openSmokeRoom') as HTMLButtonElement,
+  inviteSmokeMembers: document.getElementById('inviteSmokeMembers') as HTMLButtonElement,
+  viewSmokeMembers: document.getElementById('viewSmokeMembers') as HTMLButtonElement,
   teamNameDialog: document.getElementById('teamNameDialog') as HTMLElement,
   teamNameInput: document.getElementById('teamNameInput') as HTMLInputElement,
+  teamDescriptionInput: document.getElementById('teamDescriptionInput') as HTMLTextAreaElement,
   teamNameSave: document.getElementById('teamNameSave') as HTMLButtonElement,
   teamNameLater: document.getElementById('teamNameLater') as HTMLButtonElement,
   worldCount: document.getElementById('worldCount') as HTMLElement,
@@ -102,8 +105,6 @@ const el = {
   packetDot: document.getElementById('packetDot') as HTMLElement,
   activityItems: document.getElementById('activityItems') as HTMLElement,
   libp2pPopup: document.getElementById('libp2pPopup') as HTMLElement,
-<<<<<<< HEAD
-=======
   integrity: document.getElementById('integrity') as HTMLElement,
   weakChip: document.getElementById('weakChip') as HTMLButtonElement,
   toggleWeak: document.getElementById('toggleWeak') as HTMLButtonElement,
@@ -115,7 +116,6 @@ const el = {
   opBar: document.getElementById('opBar') as HTMLElement,
   resultCard: document.getElementById('resultCard') as HTMLElement,
   achievements: document.getElementById('achievements') as HTMLElement,
->>>>>>> origin/prince
 };
 
 const spectator =
@@ -167,8 +167,6 @@ const model: Model = {
 };
 let promptedTeamId: string | null = null;
 
-<<<<<<< HEAD
-=======
 // Gameplay layer (cosmetic + strategic; never changes a rule).
 const fx = new Fx();
 const sfx = new Sfx();
@@ -181,7 +179,6 @@ let resultTimer = 0;
 let recoverFlashUntil = 0;
 let resilientRound = -1;
 
->>>>>>> origin/prince
 const pending = new Map<string, PendingLink & { requestId: string }>();
 let camera: Camera = { scale: 1, ox: 0, oy: 0 };
 let pulseUntil = 0;
@@ -398,10 +395,7 @@ function handleMessage(message: ServerMessage): void {
     case 'link_request':
       model.incoming.set(message.request.requestId, message.request);
       toast(`${message.request.fromName} wants to connect`, 'info');
-<<<<<<< HEAD
-=======
       sfx.request();
->>>>>>> origin/prince
       renderRequests();
       renderTargetBar();
       if (searchOpen) renderSearchResults();
@@ -410,6 +404,18 @@ function handleMessage(message: ServerMessage): void {
 
     case 'request_result':
       applyRequestResult(message);
+      break;
+
+    case 'mesh_event':
+      if (message.event.type === 'node.offline') {
+        toast(`Player ${message.event.name} has gone offline and has been removed from the active mesh.`, 'info');
+      } else if (message.event.type === 'mesh.leader_changed') {
+        toast(`Player ${message.event.previousLeaderName} has gone offline. ${message.event.leaderName} is now the new Mesh Leader.`, 'info');
+      }
+      break;
+
+    case 'smoke_invite':
+      window.dispatchEvent(new CustomEvent('smoke-invite', { detail: message }));
       break;
 
     case 'error':
@@ -469,7 +475,11 @@ function handleError(code: string): void {
     return;
   }
   if (code === 'BAD_TEAM_NAME') {
-    toast('Choose a team name', 'bad');
+    toast('Team names must be 3-24 valid characters', 'bad');
+    return;
+  }
+  if (code === 'TEAM_NAME_TAKEN') {
+    toast('That team name is already in use', 'bad');
     return;
   }
   if (code === 'TEAM_NOT_FOUND') {
@@ -481,10 +491,7 @@ function handleError(code: string): void {
 
 function onJoined(): void {
   joined = true;
-<<<<<<< HEAD
-=======
   if (el.operator.hidden) renderOperator();
->>>>>>> origin/prince
   retry = 0;
   readOnly = false;
   el.play.disabled = false;
@@ -521,10 +528,7 @@ function applySnapshot(message: SnapshotMessage): void {
   model.visual = new Map(message.nodes.map((node) => [node.id, { x: node.x, y: node.y }]));
   model.me = message.you;
   model.phase = message.phase;
-<<<<<<< HEAD
-=======
   prevPhase = message.phase;
->>>>>>> origin/prince
   model.endsAt = message.phaseEndsAt;
   model.roundNo = message.roundNo;
   model.lastScore = message.lastScore;
@@ -562,27 +566,18 @@ function applySnapshot(message: SnapshotMessage): void {
 function applyDelta(message: DeltaMessage): void {
   let panelsDirty = false;
   model.offset = message.serverNow - Date.now();
-<<<<<<< HEAD
-  model.phase = message.phase;
-  model.endsAt = message.phaseEndsAt;
-  model.roundNo = message.roundNo;
-=======
   const phaseBefore = prevPhase;
   model.phase = message.phase;
   model.endsAt = message.phaseEndsAt;
   model.roundNo = message.roundNo;
   prevPhase = message.phase;
->>>>>>> origin/prince
   model.me = message.you;
   model.lastScore = message.lastScore;
   model.stats = message.stats;
   model.packetMission = message.packetMission ?? model.packetMission;
   model.teams = [...message.teams];
   youAt = Date.now();
-<<<<<<< HEAD
-=======
   if (phaseBefore !== null && phaseBefore !== message.phase) onPhaseChange(message.phase);
->>>>>>> origin/prince
 
   for (const event of message.events) {
     switch (event.type) {
@@ -626,10 +621,7 @@ function applyDelta(message: DeltaMessage): void {
           starter: false,
         });
         linkPulses.set(String(event.linkId), Date.now() + 900);
-<<<<<<< HEAD
-=======
         linkFx(event);
->>>>>>> origin/prince
         const byNodeId = String(event.byNodeId ?? '');
         const author = byNodeId ? model.nodes.get(byNodeId) : undefined;
         if (event.restoredRoute && author) {
@@ -651,10 +643,7 @@ function applyDelta(message: DeltaMessage): void {
       case 'outage.applied': {
         outageFlashUntil = Date.now() + 1200;
         const strike = event.strike as { nodes?: string[]; links?: string[] } | undefined;
-<<<<<<< HEAD
-=======
         outageFx(strike);
->>>>>>> origin/prince
         for (const id of strike?.nodes ?? []) {
           const node = model.nodes.get(id);
           if (node) model.nodes.set(id, { ...node, status: 'disabled' });
@@ -671,10 +660,7 @@ function applyDelta(message: DeltaMessage): void {
       }
 
       case 'round.recovered':
-<<<<<<< HEAD
-=======
         recoveryFx();
->>>>>>> origin/prince
         outageFlashUntil = Date.now() + 900;
         for (const [id, node] of model.nodes) model.nodes.set(id, { ...node, status: 'active' });
         for (const [id, link] of model.links) model.links.set(id, { ...link, active: true });
@@ -690,13 +676,7 @@ function applyDelta(message: DeltaMessage): void {
 
 
       case 'round.scored': {
-<<<<<<< HEAD
-        const result = event.result as
-          | { roundNo: number; score: number; c: ScoreView['c']; b: ScoreView['b']; s2: 0 | 1 | 2; strike: { type: 'A' | 'B' | 'C' } }
-          | undefined;
-=======
         const result = event.result as ResultPayload | undefined;
->>>>>>> origin/prince
         if (result) {
           model.lastScore = {
             roundNo: result.roundNo,
@@ -708,12 +688,8 @@ function applyDelta(message: DeltaMessage): void {
           };
           model.history = [...model.history.slice(-59), result.score];
           activity(`Round ${result.roundNo} complete · network score ${result.score}`, 'good');
-<<<<<<< HEAD
-          toast(`Round complete — network score ${result.score}`, 'good');
-=======
           const gained = awardProgress({ kind: 'round', score: result.score });
           showResultCard(result, gained);
->>>>>>> origin/prince
         }
         break;
       }
@@ -728,8 +704,6 @@ function applyDelta(message: DeltaMessage): void {
   }
 }
 
-<<<<<<< HEAD
-=======
 
 // ---------------------------------------------------------------------------
 // Gameplay layer: effects, weak-point radar, result card, rank
@@ -1026,7 +1000,6 @@ window.addEventListener('pointerdown', () => sfx.unlock(), { passive: true });
 window.addEventListener('keydown', () => sfx.unlock(), { passive: true });
 syncToggles();
 
->>>>>>> origin/prince
 // ---------------------------------------------------------------------------
 // Request UI
 // ---------------------------------------------------------------------------
@@ -1261,25 +1234,133 @@ function renderTeamLeaderboard(): void {
   el.teamGroupCount.textContent = String(teams.length);
   const myTeam = teams.find(({ team }) => team.memberNodeIds.includes(model.me?.nodeId ?? ''))?.team;
   if (!teams.length) {
-    const empty = document.createElement('div'); empty.className = 'teamEmpty'; empty.textContent = 'Connect two active players to form a team.'; el.teamList.append(empty); return;
+    const empty = document.createElement('div'); empty.className = 'teamEmpty'; empty.textContent = 'Connect two active players to form a team.'; el.teamList.append(empty);
   }
   teams.forEach(({ team, metrics }, index) => {
-    const row = document.createElement('button'); row.type = 'button'; row.className = 'teamRow';
+    const row = document.createElement('div'); row.className = 'teamRow'; row.tabIndex = 0; row.setAttribute('role', 'button');
     if (team.teamId === myTeam?.teamId) row.classList.add('is-me');
     const rank = document.createElement('span'); rank.className = 'teamRank'; rank.textContent = String(index + 1);
     const body = document.createElement('span'); body.className = 'teamRowBody';
-    const name = document.createElement('span'); name.className = 'teamRowName'; name.textContent = team.name ?? 'Unnamed team';
-    const meta = document.createElement('span'); meta.className = 'teamRowMeta'; meta.textContent = `${team.memberNodeIds.length} members · ${metrics.links} active links · ${team.qualification === 'entered' ? 'Surprise Zone' : team.qualification === 'qualified' ? 'Qualified' : 'Not qualified'}`;
+    const name = document.createElement('span'); name.className = 'teamRowName'; name.textContent = `${team.name ?? 'Unnamed team'}${team.leaderNodeId === model.me?.nodeId ? '  ♛' : ''}`;
+    const isLeader = team.leaderNodeId === model.me?.nodeId;
+    const meta = document.createElement('span'); meta.className = 'teamRowMeta'; meta.textContent = `${team.memberNodeIds.length} members · ${metrics.links} active links · ${team.leaderNodeId ? `leader ${model.nodes.get(team.leaderNodeId)?.name ?? team.leaderNodeId} · ` : ''}${isLeader ? 'RENAME TEAM · ' : ''}${team.qualification === 'entered' ? 'Surprise Zone' : team.qualification === 'qualified' ? 'Qualified' : 'Not qualified'}`;
     const count = document.createElement('span'); count.className = 'teamRowCount'; count.textContent = `${metrics.restored} repairs`; count.title = 'Repair-phase links that merged disconnected components';
     body.append(name, meta); row.append(rank, body, count);
-    row.addEventListener('click', () => { const first = team.memberNodeIds[0]; if (first) focusPlayerNode(first); });
+    row.addEventListener('click', () => {
+      if (isLeader) {
+        promptedTeamId = team.teamId;
+        el.teamNameDialog.querySelector('.eyebrow')!.textContent = 'Mesh leadership';
+        (document.getElementById('teamNameTitle') as HTMLElement).textContent = team.name === null ? 'Create your team' : 'Rename your team';
+        el.teamNameInput.value = team.name ?? '';
+        el.teamDescriptionInput.value = team.description ?? '';
+        el.teamNameSave.textContent = team.name === null ? 'Create team' : 'Update team name';
+        el.teamNameDialog.hidden = false;
+        el.teamNameInput.focus();
+        return;
+      }
+      const first = team.memberNodeIds[0]; if (first) focusPlayerNode(first);
+    });
+    row.addEventListener('keydown', (event) => {
+      if (event.key === 'Enter' || event.key === ' ') {
+        event.preventDefault();
+        row.click();
+      }
+    });
     el.teamList.append(row);
   });
-  if (myTeam && myTeam.name === null && promptedTeamId !== myTeam.teamId && model.phase !== 'warning' && model.phase !== 'result' && model.incoming.size === 0) {
+  renderSmokeRoom(myTeam);
+  if (myTeam && myTeam.name === null && myTeam.leaderNodeId === model.me?.nodeId && promptedTeamId !== myTeam.teamId && model.phase !== 'warning' && model.phase !== 'result' && model.incoming.size === 0) {
     promptedTeamId = myTeam.teamId;
     el.teamNameDialog.hidden = false;
     el.teamNameInput.value = '';
+    el.teamDescriptionInput.value = '';
+    el.teamNameDialog.querySelector('.eyebrow')!.textContent = 'Mesh leadership assigned';
+    (document.getElementById('teamNameTitle') as HTMLElement).textContent = 'Create your team';
+    el.teamNameSave.textContent = 'Create team';
     window.setTimeout(() => el.teamNameInput.focus(), 0);
+  }
+
+  function renderSmokeRoom(team: TeamView | undefined): void {
+    const member = Boolean(team?.memberNodeIds.includes(model.me?.nodeId ?? ''));
+    const connected = model.me?.networkStatus === 'connected';
+    el.openSmokeRoom.disabled = !(member && connected);
+    el.inviteSmokeMembers.disabled = !(member && connected);
+    el.viewSmokeMembers.disabled = !Boolean(team);
+    if (!team) {
+      el.smokeRoomStatus.textContent = 'NO ACTIVE TEAM';
+      el.smokeRoomDetails.textContent = model.me?.offline
+        ? 'Your game node is under repair, but network access is still being monitored. Connect two players to create a private room.'
+        : 'Connect two active players to create a team and unlock your private communication room.';
+      return;
+    }
+    const name = team.name ?? 'Unnamed team';
+    const state = !member ? 'MEMBERSHIP REQUIRED' : !connected ? 'NODE DISCONNECTED' : 'ROOM AVAILABLE';
+    el.smokeRoomStatus.textContent = state;
+    el.smokeRoomDetails.textContent = `Team: ${name} · Members: ${team.memberNodeIds.length} · Leader: ${model.nodes.get(team.leaderNodeId ?? '')?.name ?? 'unassigned'} · Room: ${team.roomId}`;
+    el.openSmokeRoom.onclick = () => openSmokeRoom(team);
+    el.inviteSmokeMembers.onclick = () => inviteSmokeMembers(team);
+    el.viewSmokeMembers.onclick = () => toast(team.memberNodeIds.map((id) => model.nodes.get(id)?.name ?? id).join(', '), 'info');
+  }
+
+  async function inviteSmokeMembers(team: TeamView): Promise<void> {
+    if (!send({ type: 'smoke_invite', teamId: team.teamId })) {
+      toast('Reconnect before inviting team members', 'bad');
+      return;
+    }
+    toast('Smoke Room invite sent to connected team members', 'good');
+  }
+
+  function showSmokeInvite(message: Extract<ServerMessage, { type: 'smoke_invite' }>): void {
+    const popup = document.getElementById('smokeInvitePopup');
+    if (!popup) return;
+    popup.replaceChildren();
+    const body = document.createElement('div');
+    body.innerHTML = `<strong>SMOKE ROOM INVITE</strong><p>${message.fromName} invited you to ${message.teamName}.</p>`;
+    const actions = document.createElement('div');
+    actions.className = 'smokeInviteActions';
+    const join = document.createElement('button');
+    join.type = 'button';
+    join.textContent = 'OPEN SMOKE ROOM';
+    join.addEventListener('click', () => {
+      window.dispatchEvent(new CustomEvent('smoke-invite-open', { detail: message }));
+      popup.hidden = true;
+    });
+    const dismiss = document.createElement('button');
+    dismiss.type = 'button';
+    dismiss.textContent = 'Later';
+    dismiss.addEventListener('click', () => { popup.hidden = true; });
+    actions.append(join, dismiss);
+    popup.append(body, actions);
+    popup.hidden = false;
+  }
+
+  window.addEventListener('smoke-invite', (event) => {
+    showSmokeInvite((event as CustomEvent<Extract<ServerMessage, { type: 'smoke_invite' }>>).detail);
+  });
+  window.addEventListener('smoke-invite-open', (event) => {
+    const message = (event as CustomEvent<Extract<ServerMessage, { type: 'smoke_invite' }>>).detail;
+    const team = model.teams.find((entry) => entry.teamId === message.teamId);
+    if (team) openSmokeRoom(team);
+  });
+
+  function openSmokeRoom(team: TeamView): void {
+    const sessionToken = readToken();
+    if (!sessionToken || !model.me?.nodeId) {
+      toast('Reconnect before opening the Smoke Room.', 'bad');
+      return;
+    }
+    el.openSmokeRoom.disabled = true;
+    fetch('/api/integration/rooms/authorize', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', authorization: `Bearer ${sessionToken}` },
+      body: JSON.stringify({ roomId: team.roomId }),
+    }).then(async (response) => {
+      const result = await response.json() as { accessToken?: string; error?: string };
+      if (!response.ok || !result.accessToken) throw new Error(result.error ?? 'Smoke Room authorization failed');
+      const smokeBase = import.meta.env.VITE_SMOKE_BASE_URL ?? 'http://localhost:10001';
+      window.open(`${smokeBase}/?roomId=${encodeURIComponent(team.roomId)}&token=${encodeURIComponent(result.accessToken)}`, '_blank', 'noopener');
+    }).catch((error: unknown) => toast(error instanceof Error ? error.message : 'Smoke Room authorization failed', 'bad'))
+      .finally(() => renderSmokeRoom(team));
   }
 }
 
@@ -1308,7 +1389,7 @@ function renderLeaderboard(): void {
     row.className = 'lbRow';
     row.dataset.nodeId = entry.nodeId;
     if (entry.isMe) row.classList.add('is-me');
-    if (entry.status === 'disabled') row.classList.add('is-offline');
+    if (entry.presence === 'offline') row.classList.add('is-offline');
     row.setAttribute(
       'aria-label',
       `Rank ${entry.rank}, ${entry.name}${entry.isMe ? ', you' : ''}, ${entry.restoredRoutes} restored routes, ${entry.activeLinks} active links`,
@@ -1400,7 +1481,7 @@ function renderSearchResults(): void {
     option.className = 'searchResult';
     option.setAttribute('role', 'option');
     option.dataset.nodeId = entry.nodeId;
-    if (entry.status === 'disabled') option.classList.add('is-offline');
+    if (entry.presence === 'offline') option.classList.add('is-offline');
 
     const rank = document.createElement('span');
     rank.className = 'searchRank';
@@ -1576,10 +1657,7 @@ function requestConnection(targetId: string): void {
     renderTargetBar();
     toast('Could not confirm, try again', 'bad');
   }, 8000);
-<<<<<<< HEAD
-=======
   sfx.unlock();
->>>>>>> origin/prince
   if (!send({ type: 'request_link', targetNodeId: targetId })) {
     window.clearTimeout(requestSendTimer);
     requestSendTimer = 0;
@@ -1602,8 +1680,10 @@ el.teamNameSave.addEventListener('click', () => {
   const team = model.teams.find((entry) => entry.teamId === promptedTeamId);
   const name = el.teamNameInput.value.trim();
   if (!team || !name) { toast('Choose a team name', 'bad'); return; }
-  if (name.length > 32) { toast('Team names must be 32 characters or fewer', 'bad'); return; }
-  if (!send({ type: 'team_name', teamId: team.teamId, name })) { toast('Reconnecting — try again when the network resumes', 'bad'); return; }
+  if (name.length < 3 || name.length > 24) { toast('Team names must be 3-24 characters', 'bad'); return; }
+  const description = el.teamDescriptionInput.value.trim();
+  if (description.length > 160) { toast('Team descriptions must be 160 characters or fewer', 'bad'); return; }
+  if (!send({ type: 'team_name', teamId: team.teamId, name, description })) { toast('Reconnecting — try again when the network resumes', 'bad'); return; }
   el.teamNameDialog.hidden = true;
 });
 el.teamNameLater.addEventListener('click', () => { el.teamNameDialog.hidden = true; });
@@ -1854,7 +1934,7 @@ canvas.addEventListener('pointerdown', (event) => {
   // Dragging your own node moves it; a press without movement is still a tap.
   if (node.id === model.me.nodeId) {
     if (node.status !== 'active') {
-      toast('Your node is offline until results', 'bad');
+      toast(model.me.networkStatus === 'connected' ? 'Your node is under repair; network membership is preserved.' : 'Your node is disconnected.', 'bad');
       return;
     }
     drag = {
@@ -2076,12 +2156,9 @@ function tokenRemainingMs(): number {
 
 function updateHud(): void {
   document.body.dataset.phase = model.phase;
-<<<<<<< HEAD
-=======
   document.body.classList.toggle('warnPulse', model.phase === 'warning');
   document.body.classList.toggle('recoverFlash', Date.now() < recoverFlashUntil);
   refreshIntegrity();
->>>>>>> origin/prince
   el.phase.textContent = PHASE_LABEL[model.phase] ?? model.phase;
   el.countdown.textContent = `${(remainingMs() / 1000).toFixed(1)}s`;
   el.score.textContent = model.lastScore ? model.lastScore.score.toFixed(1) : '—';
@@ -2110,8 +2187,10 @@ function updateHud(): void {
     el.hint.textContent = 'Join to start connecting';
   } else if (model.phase === 'result') {
     el.hint.textContent = `Results in ${Math.ceil(remainingMs() / 1000)}s`;
+  } else if (model.me.offline && model.me.networkStatus === 'connected') {
+    el.hint.textContent = 'Your node is under repair; network membership is preserved';
   } else if (model.me.offline) {
-    el.hint.textContent = 'Your node is offline until results';
+    el.hint.textContent = 'Your node is disconnected';
   } else if (tokens === 0) {
     el.hint.textContent = `Out of tokens - next in ${Math.ceil(tokenRemainingMs() / 1000)}s`;
   } else if (selectedTargetId) {
@@ -2197,10 +2276,7 @@ function frame(timestamp: number): void {
 
   updateKeyboardMovement(dt);
   smoothPositions(dt);
-<<<<<<< HEAD
-=======
   fx.update(dt);
->>>>>>> origin/prince
   const now = Date.now();
   for (const [id, expiresAt] of linkPulses) if (expiresAt <= now) linkPulses.delete(id);
   document.body.classList.toggle('outageFlash', now < outageFlashUntil);
@@ -2258,10 +2334,6 @@ function frame(timestamp: number): void {
     }
   }
 
-<<<<<<< HEAD
-  drawBoard({
-    ctx,
-=======
   ctx.clearRect(0, 0, window.innerWidth, window.innerHeight);
   const shake = fx.offset(now);
   ctx.save();
@@ -2272,7 +2344,6 @@ function frame(timestamp: number): void {
     weakIds: radarOn && model.phase !== 'result' ? analysis.cutVertices : undefined,
     hubIds: radarOn && model.phase === 'warning' ? analysis.hubIds : undefined,
     flow: true,
->>>>>>> origin/prince
     nodes: model.nodes,
     links: model.links,
     positions: model.visual,
@@ -2296,11 +2367,8 @@ function frame(timestamp: number): void {
     highlightUntil,
     worldRadius: model.config?.movement.worldRadius ?? 1400,
   });
-<<<<<<< HEAD
-=======
   fx.drawOverlay(ctx, camera);
   ctx.restore();
->>>>>>> origin/prince
   requestAnimationFrame(frame);
 }
 requestAnimationFrame(frame);
@@ -2314,7 +2382,7 @@ window.setInterval(() => {
   }
 }, 1000);
 
-window.setInterval(() => send({ type: 'ping', t: Date.now() }), 9000);
+window.setInterval(() => send({ type: 'ping', t: Date.now() }), 3000);
 
 window.addEventListener('beforeunload', () => socket?.close());
 

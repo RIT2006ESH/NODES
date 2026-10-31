@@ -1,8 +1,0 @@
-node_modules/
-apps/*/dist/
-data/
-reports/
-.env
-.env.*
-!.env.example
-*.log

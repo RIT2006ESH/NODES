@@ -17,6 +17,7 @@ export interface PlayerEntry {
   readonly nodeId: string;
   readonly name: string;
   readonly status: NodeView['status'];
+  readonly presence: NodeView['presence'];
   readonly activeLinks: number;
   readonly restoredRoutes: number;
   readonly isMe: boolean;
@@ -100,6 +101,7 @@ export function buildLeaderboard(
     nodeId: node.id,
     name: node.name,
     status: node.status,
+    presence: node.presence,
     activeLinks: counts.get(node.id) ?? 0,
     restoredRoutes: node.restoredRoutes ?? 0,
     isMe: node.id === meId,

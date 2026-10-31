@@ -1,4 +1,12 @@
-import { createGameServer } from './app.js';
+import { loadEnvFile } from 'node:process';
+
+try {
+  loadEnvFile();
+} catch (error) {
+  if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
+}
+
+const { createGameServer } = await import('./app.js');
 
 let server: Awaited<ReturnType<typeof createGameServer>>;
 try {

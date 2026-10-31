@@ -9,7 +9,7 @@ import { createServer, type Server, type IncomingMessage, type ServerResponse } 
 import { existsSync, mkdirSync, readFileSync, renameSync, statSync, writeFileSync } from 'node:fs';
 import { dirname, extname, join, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { randomBytes } from 'node:crypto';
+import { createPrivateKey, randomBytes, sign as signEd25519 } from 'node:crypto';
 import { WebSocketServer, WebSocket } from 'ws';
 import { loadDefaultConfig } from '@mng/config';
 import type { GameConfig } from '@mng/config';
@@ -25,9 +25,11 @@ import type {
   WireEvent,
   PacketMissionView,
   TeamView,
+  MeshEvent,
 } from '@mng/protocol';
 import { LineHost } from './line.js';
 import { toScore, toSnapshot, toStats, toYou } from './view.js';
+import { validateUsername } from './username.js';
 
 interface ClientConnection {
   ws: WebSocket;
@@ -35,6 +37,7 @@ interface ClientConnection {
   nodeId: string | null;
   spectator: boolean;
   ready: boolean;
+  lastHeartbeatAt: number;
 }
 
 /**
@@ -120,6 +123,8 @@ export interface GameServerOptions {
   readonly handleSignals?: boolean;
   /** Test/ops override; production uses config.links.requestTtlMs. */
   readonly requestTtlMs?: number;
+  /** Backend heartbeat timeout. Defaults to NODE_OFFLINE_TIMEOUT_MS or 10 seconds. */
+  readonly offlineTimeoutMs?: number;
 }
 
 export async function createGameServer(options: GameServerOptions = {}): Promise<GameServer> {
@@ -132,10 +137,21 @@ export async function createGameServer(options: GameServerOptions = {}): Promise
   const distDir = options.distDir ?? fileURLToPath(new URL('../../web/dist', import.meta.url));
   const tickMs = options.tickMs ?? 200;
   const requestTtlMs = options.requestTtlMs ?? config.links.requestTtlMs;
+  const configuredOfflineTimeout = Number(process.env.NODE_OFFLINE_TIMEOUT_MS);
+  const offlineTimeoutMs = options.offlineTimeoutMs ?? (Number.isFinite(configuredOfflineTimeout) && configuredOfflineTimeout > 0 ? configuredOfflineTimeout : 10_000);
   const seed = options.seed ?? (Number(process.env.SEED) || (clock() >>> 0));
+  const smokeBaseUrl = process.env.SMOKE_BASE_URL?.replace(/\/+$/, '');
+  const smokeInternalSecret = process.env.SMOKE_INTERNAL_API_SECRET;
+  const nodesJwtPrivateKey = process.env.NODES_JWT_PRIVATE_KEY
+    ?? (process.env.NODES_JWT_PRIVATE_KEY_FILE && existsSync(process.env.NODES_JWT_PRIVATE_KEY_FILE)
+      ? readFileSync(process.env.NODES_JWT_PRIVATE_KEY_FILE, 'utf8')
+      : undefined);
+  const nodesJwtIssuer = process.env.NODES_JWT_ISSUER ?? 'nodes';
+  const nodesJwtAudience = process.env.NODES_JWT_AUDIENCE ?? 'smoke-room';
 
   const line = LineHost.load(persistPath, config) ?? new LineHost(config, seed, clock());
   const clients = new Map<WebSocket, ClientConnection>();
+  const offlineNodes = new Set<string>();
   const sessions = new Map<string, { sessionId: string; nodeId: string; name: string }>();
   const sessionsPath = persistPath.replace(/\.json$/, '.sessions.json');
   const teamStatePath = persistPath.replace(/\.json$/, '.teams.json');
@@ -154,10 +170,42 @@ export async function createGameServer(options: GameServerOptions = {}): Promise
   // Packet Run is an occasional round-side event, not a per-tick loop. A
   // completed/failed mission must leave a quiet window before another starts.
   let packetNextAt = 0;
-  type TeamRecord = { name: string | null; memberNodeIds: string[]; createdAt: number; area: 'main' | 'surprise'; qualification: 'ineligible' | 'qualified' | 'entered'; recoveries: number; activeLinks: number };
+  type TeamRecord = { name: string | null; description: string | null; leaderNodeId: string | null; nameOwnerNodeId: string | null; memberNodeIds: string[]; memberJoinedAt: Record<string, number>; createdAt: number; area: 'main' | 'surprise'; qualification: 'ineligible' | 'qualified' | 'entered'; recoveries: number; activeLinks: number };
   const teamRecords = new Map<string, TeamRecord>();
   const areas = new Map<string, 'main' | 'surprise'>();
   const repairBaseline = new Map<string, number>();
+  const supabase = process.env.SUPABASE_URL && process.env.SUPABASE_SECRET_KEY
+    ? (await import('./supabase.js')).createSupabaseStore()
+    : null;
+  if (supabase) {
+    void supabase.verify().catch((error: unknown) => {
+      console.error('Supabase connection verification failed:', error instanceof Error ? error.message : 'unknown error');
+    });
+  }
+
+  const syncSmoke = (path: string, payload: unknown, eventId: string): void => {
+    if (!smokeBaseUrl || !smokeInternalSecret) return;
+    void fetch(`${smokeBaseUrl}${path}`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-smoke-internal-secret': smokeInternalSecret },
+      body: JSON.stringify({ ...payload as Record<string, unknown>, eventId }),
+    }).catch(() => undefined);
+  };
+
+  const issueSmokeToken = (nodeId: string, team: TeamView): string | null => {
+    if (!nodesJwtPrivateKey) return null;
+    const now = Math.floor(clock() / 1000);
+    const header = Buffer.from(JSON.stringify({ alg: 'EdDSA', typ: 'JWT' })).toString('base64url');
+    const payload = Buffer.from(JSON.stringify({
+      iss: nodesJwtIssuer, aud: nodesJwtAudience, sub: nodeId, nodeId,
+      roomId: team.roomId, teamId: team.teamId, teamName: team.name ?? team.teamId,
+      role: team.leaderNodeId === nodeId ? 'leader' : 'member',
+      iat: now, exp: now + 300, jti: randomBytes(16).toString('hex'),
+    })).toString('base64url');
+    const unsigned = `${header}.${payload}`;
+    const signature = signEd25519(null, Buffer.from(unsigned), createPrivateKey(nodesJwtPrivateKey)).toString('base64url');
+    return `${unsigned}.${signature}`;
+  };
 
   const saveTeamState = (): void => {
     try {
@@ -175,13 +223,21 @@ export async function createGameServer(options: GameServerOptions = {}): Promise
       for (const [teamId, value] of Object.entries(raw.teams ?? {})) {
         const members = [...new Set(value.memberNodeIds ?? [])].filter((id): id is string => Boolean(line.state.nodes[id]));
         if (members.length < 2) continue;
-        teamRecords.set(teamId, { name: typeof value.name === 'string' ? value.name.slice(0, 32) : null, memberNodeIds: members, createdAt: Number(value.createdAt) || clock(), area: value.area === 'surprise' ? 'surprise' : 'main', qualification: value.qualification === 'entered' ? 'entered' : value.qualification === 'qualified' ? 'qualified' : 'ineligible', recoveries: Math.max(0, Number(value.recoveries) || 0), activeLinks: 0 });
+        const leaderNodeId = typeof value.leaderNodeId === 'string' && members.includes(value.leaderNodeId)
+          ? value.leaderNodeId
+          : typeof value.nameOwnerNodeId === 'string' && members.includes(value.nameOwnerNodeId)
+            ? value.nameOwnerNodeId
+            : members[0]!;
+        const memberJoinedAt = Object.fromEntries(members.map((id) => [id, Number(value.memberJoinedAt?.[id]) || line.state.nodes[id]!.createdAt]));
+        teamRecords.set(teamId, { name: typeof value.name === 'string' ? value.name.slice(0, 24) : null, description: typeof value.description === 'string' ? value.description.slice(0, 160) : null, leaderNodeId, nameOwnerNodeId: typeof value.nameOwnerNodeId === 'string' && members.includes(value.nameOwnerNodeId) ? value.nameOwnerNodeId : null, memberNodeIds: members, memberJoinedAt, createdAt: Number(value.createdAt) || clock(), area: value.area === 'surprise' ? 'surprise' : 'main', qualification: value.qualification === 'entered' ? 'entered' : value.qualification === 'qualified' ? 'qualified' : 'ineligible', recoveries: Math.max(0, Number(value.recoveries) || 0), activeLinks: 0 });
       }
     }
   } catch { /* missing, invalid, or old team state starts safely empty */ }
 
   function currentTeams(now: number): TeamView[] {
-    const active = new Set(line.state.nodeOrder.filter((id) => line.state.nodes[id]?.status === 'active'));
+    const active = new Set(line.state.nodeOrder.filter((id) =>
+      (line.state.nodes[id]?.status === 'active' || line.state.phase === 'repair') && !offlineNodes.has(id),
+    ));
     const adjacency = new Map<string, string[]>();
     for (const id of active) adjacency.set(id, []);
     for (const link of Object.values(line.state.links)) {
@@ -212,13 +268,15 @@ export async function createGameServer(options: GameServerOptions = {}): Promise
       const inherited = candidates[0]?.[1];
       const teamId = candidates[0]?.[0] ?? `team_${members.join('_')}`;
       const prior = inherited;
-      const record: TeamRecord = { name: prior?.name ?? null, memberNodeIds: members, createdAt: prior?.createdAt ?? now, area, qualification: prior?.qualification ?? 'ineligible', recoveries: prior?.recoveries ?? 0, activeLinks };
+      const leaderNodeId = prior?.leaderNodeId && members.includes(prior.leaderNodeId) ? prior.leaderNodeId : prior?.nameOwnerNodeId && members.includes(prior.nameOwnerNodeId) ? prior.nameOwnerNodeId : members[0]!;
+      const memberJoinedAt = Object.fromEntries(members.map((id) => [id, prior?.memberJoinedAt[id] ?? line.state.nodes[id]!.createdAt]));
+      const record: TeamRecord = { name: prior?.name ?? null, description: prior?.description ?? null, leaderNodeId, nameOwnerNodeId: prior?.nameOwnerNodeId ?? null, memberNodeIds: members, memberJoinedAt, createdAt: prior?.createdAt ?? now, area, qualification: prior?.qualification ?? 'ineligible', recoveries: prior?.recoveries ?? 0, activeLinks };
       if (candidates[0]) used.add(candidates[0][0]);
       next.set(teamId, record);
     }
     teamRecords.clear();
     for (const [id, record] of next) teamRecords.set(id, record);
-    return [...next.entries()].map(([teamId, record]) => ({ teamId, ...record }));
+    return [...next.entries()].map(([teamId, record]) => ({ teamId, roomId: teamId, ...record }));
   }
 
   function evaluateQualification(now: number): boolean {
@@ -337,24 +395,106 @@ export async function createGameServer(options: GameServerOptions = {}): Promise
     if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(message));
   };
 
+  const broadcastMeshEvent = (event: MeshEvent): void => {
+    for (const client of clients.values()) {
+      if (client.ready) send(client.ws, { type: 'mesh_event', event });
+    }
+  };
+
+  const liveNode = (nodeId: string, now: number): boolean =>
+    [...clients.values()].some((client) =>
+      client.ready &&
+      client.nodeId === nodeId &&
+      now - client.lastHeartbeatAt <= offlineTimeoutMs,
+    );
+
+  function removeOfflineNode(nodeId: string, now: number): void {
+    if (offlineNodes.has(nodeId)) return;
+    const node = line.state.nodes[nodeId];
+    if (!node) return;
+
+    const affected = currentTeams(now).filter((team) => team.memberNodeIds.includes(nodeId));
+    offlineNodes.add(nodeId);
+    for (const linkId of Object.keys(line.state.links)) {
+      const link = line.state.links[linkId]!;
+      if (link.a === nodeId || link.b === nodeId) delete line.state.links[linkId];
+    }
+
+    for (const team of affected) {
+      const record = teamRecords.get(team.teamId);
+      if (!record) continue;
+      const previousLeader = record.leaderNodeId;
+      record.memberNodeIds = record.memberNodeIds.filter((id) => id !== nodeId);
+      delete record.memberJoinedAt[nodeId];
+      if (previousLeader === nodeId) {
+        const successor = record.memberNodeIds
+          .filter((id) => !offlineNodes.has(id) && liveNode(id, now))
+          .sort((a, b) => (record.memberJoinedAt[a] ?? Number.MAX_SAFE_INTEGER) - (record.memberJoinedAt[b] ?? Number.MAX_SAFE_INTEGER) || a.localeCompare(b))[0] ?? null;
+        record.leaderNodeId = successor;
+        record.nameOwnerNodeId = successor;
+        if (successor) {
+          broadcastMeshEvent({
+            type: 'mesh.leader_changed',
+            teamId: team.teamId,
+            previousLeaderNodeId: nodeId,
+            previousLeaderName: node.name,
+            leaderNodeId: successor,
+            leaderName: line.state.nodes[successor]?.name ?? successor,
+          });
+        }
+      }
+      broadcastMeshEvent({ type: 'mesh.member_removed', nodeId, name: node.name, teamId: team.teamId });
+      syncSmoke(`/api/v1/internal/rooms/${encodeURIComponent(team.roomId)}/revoke`, {
+        nodeId, reason: 'offline_timeout', occurredAt: new Date(now).toISOString(),
+      }, `offline:${team.roomId}:${nodeId}:${now}`);
+      if (record.leaderNodeId) {
+        syncSmoke(`/api/v1/internal/rooms/${encodeURIComponent(team.roomId)}/role`, {
+          nodeId: record.leaderNodeId, role: 'leader',
+        }, `leader:${team.roomId}:${record.leaderNodeId}:${now}`);
+      }
+    }
+    broadcastMeshEvent({ type: 'node.offline', nodeId, name: node.name, teamId: affected[0]?.teamId ?? null });
+    line.save(persistPath);
+    saveTeamState();
+    broadcastSnapshot();
+  }
+
+  function checkOfflineNodes(now: number): void {
+    currentTeams(now);
+    const members = new Set<string>();
+    for (const team of teamRecords.values()) {
+      for (const member of team.memberNodeIds) members.add(member);
+    }
+    for (const nodeId of members) {
+      if (offlineNodes.has(nodeId)) continue;
+      const lastHeartbeat = [...clients.values()]
+        .filter((client) => client.ready && client.nodeId === nodeId)
+        .reduce((latest, client) => Math.max(latest, client.lastHeartbeatAt), line.state.nodes[nodeId]?.lastSeenAt ?? 0);
+      if (lastHeartbeat > 0 && now - lastHeartbeat > offlineTimeoutMs) removeOfflineNode(nodeId, now);
+    }
+  }
+
   const deltaFor = (
     events: readonly WireEvent[],
     nodeId: string | null,
-  ): ServerMessage => ({
-    type: 'delta',
-    v: PROTOCOL_VERSION,
-    seq: line.seq,
-    serverNow: clock(),
-    phase: line.state.phase,
-    phaseEndsAt: line.state.phaseEndsAt,
-    roundNo: line.state.roundNo,
-    events,
-    you: toYou(line.state, config, nodeId),
-    lastScore: toScore(line.state),
-    stats: toStats(line.state),
-    packetMission,
+  ): ServerMessage => {
+    const onlineNodeIds = new Set([...clients.values()].filter((client) => client.ready && client.nodeId).map((client) => client.nodeId as string));
+    return {
+      type: 'delta',
+      v: PROTOCOL_VERSION,
+      seq: line.seq,
+      serverNow: clock(),
+      phase: line.state.phase,
+      phaseEndsAt: line.state.phaseEndsAt,
+      roundNo: line.state.roundNo,
+      events,
+      you: toYou(line.state, config, nodeId, onlineNodeIds),
+      lastScore: toScore(line.state),
+      stats: toStats(line.state),
+      packetMission,
       teams: currentTeams(clock()),
-  });
+    };
+  };
 
   const broadcastEvents = (events: readonly WireEvent[]): void => {
     if (events.length === 0) return;
@@ -490,6 +630,9 @@ export async function createGameServer(options: GameServerOptions = {}): Promise
   };
 
   const broadcastSnapshot = (): void => {
+    if (supabase) void supabase.syncTeams(currentTeams(clock())).catch((error: unknown) => {
+      console.error('Supabase team synchronization failed:', error instanceof Error ? error.message : 'unknown error');
+    });
     for (const client of clients.values()) {
       if (!client.ready) continue;
       send(client.ws, snapshotFor(client));
@@ -502,6 +645,73 @@ export async function createGameServer(options: GameServerOptions = {}): Promise
 
   async function handleHttp(req: IncomingMessage, res: ServerResponse): Promise<void> {
     const url = new URL(req.url ?? '/', `http://${req.headers.host ?? 'localhost'}`);
+
+    if (url.pathname === '/api/profile/availability' && req.method === 'GET') {
+      if (!supabase) { json(res, 503, { error: 'Supabase is not configured' }); return; }
+      const username = validateUsername(url.searchParams.get('username') ?? '');
+      if (!username) { json(res, 400, { available: false, error: 'INVALID_USERNAME' }); return; }
+      try {
+        const existing = await supabase.getProfileByUsername?.(username);
+        json(res, 200, { available: !existing });
+      } catch {
+        json(res, 503, { available: false, error: 'PROFILE_LOOKUP_FAILED' });
+      }
+      return;
+    }
+
+    if ((url.pathname === '/api/profile/register' || url.pathname === '/api/profile/update') && req.method === 'POST') {
+      if (!supabase) { json(res, 503, { error: 'Supabase is not configured' }); return; }
+      const supplied = req.headers.authorization;
+      const sessionToken = supplied?.startsWith('Bearer ') ? supplied.slice(7) : null;
+      const session = sessionToken ? sessions.get(sessionToken) : undefined;
+      if (!session) { json(res, 401, { error: 'valid NODES session token required' }); return; }
+      const input = await readRequestJson(req);
+      const result = url.pathname.endsWith('/register')
+        ? await supabase.registerUsername(session.nodeId, String(input.username ?? ''))
+        : await supabase.updateUsername(session.nodeId, String(input.username ?? ''));
+      if (!result.ok) { json(res, result.code === 'INVALID_USERNAME' ? 400 : 409, { error: result.code }); return; }
+      json(res, 200, { profile: result.profile });
+      return;
+    }
+
+    if (url.pathname === '/api/integration/rooms/authorize' && req.method === 'POST') {
+      const supplied = req.headers.authorization;
+      const sessionToken = supplied?.startsWith('Bearer ') ? supplied.slice(7) : null;
+      const session = sessionToken ? sessions.get(sessionToken) : undefined;
+      if (!session) {
+        json(res, 401, { error: 'valid NODES session token required' });
+        return;
+      }
+      const input = await readRequestJson(req);
+      const team = currentTeams(clock()).find((entry) =>
+        entry.roomId === input.roomId && entry.memberNodeIds.includes(session.nodeId),
+      );
+      if (!team) {
+        json(res, 403, { error: 'node is not an active member of this room' });
+        return;
+      }
+      let accessToken: string | null;
+      try {
+        accessToken = issueSmokeToken(session.nodeId, team);
+      } catch {
+        json(res, 503, { error: 'Smoke token issuer configuration is invalid' });
+        return;
+      }
+      if (!accessToken) {
+        json(res, 503, { error: 'Smoke token issuer is not configured' });
+        return;
+      }
+      json(res, 200, {
+        authorized: true,
+        roomId: team.roomId,
+        teamId: team.teamId,
+        teamName: team.name,
+        nodeId: session.nodeId,
+        role: team.leaderNodeId === session.nodeId ? 'leader' : 'member',
+        accessToken,
+      });
+      return;
+    }
 
     if (url.pathname === '/healthz') {
       json(res, 200, {
@@ -651,6 +861,7 @@ export async function createGameServer(options: GameServerOptions = {}): Promise
       nodeId: null,
       spectator,
       ready: false,
+      lastHeartbeatAt: clock(),
     };
     clients.set(ws, client);
     metrics.connections++;
@@ -663,6 +874,7 @@ export async function createGameServer(options: GameServerOptions = {}): Promise
         client.sessionId = session.sessionId;
         client.nodeId = session.nodeId;
         client.ready = true;
+        client.lastHeartbeatAt = clock();
         send(ws, {
           type: 'welcome',
           v: PROTOCOL_VERSION,
@@ -698,6 +910,13 @@ export async function createGameServer(options: GameServerOptions = {}): Promise
         send(ws, { type: 'error', code: 'BAD_MESSAGE' });
         return;
       }
+      if (message.type === 'ping') {
+        client.lastHeartbeatAt = now;
+        if (client.nodeId) {
+          const node = line.state.nodes[client.nodeId];
+          if (node) node.lastSeenAt = now;
+        }
+      }
 
       switch (message.type) {
         case 'join':
@@ -705,7 +924,11 @@ export async function createGameServer(options: GameServerOptions = {}): Promise
           return;
 
         case 'team_name':
-          handleTeamName(ws, client, message.teamId, message.name, now);
+          void handleTeamName(ws, client, message.teamId, message.name, message.description, now);
+          return;
+
+        case 'smoke_invite':
+          handleSmokeInvite(ws, client, message.teamId, now);
           return;
 
         case 'request_link':
@@ -748,18 +971,28 @@ export async function createGameServer(options: GameServerOptions = {}): Promise
     });
   });
 
-  function handleTeamName(ws: WebSocket, client: ClientConnection, rawTeamId: unknown, rawName: unknown, now: number): void {
+  async function handleTeamName(ws: WebSocket, client: ClientConnection, rawTeamId: unknown, rawName: unknown, rawDescription: unknown, now: number): Promise<void> {
     if (!client.ready || !client.nodeId || typeof rawTeamId !== 'string' || typeof rawName !== 'string') {
       send(ws, { type: 'error', code: 'BAD_MESSAGE' });
       return;
     }
-    const name = rawName.replace(/[\u0000-\u001f\u007f]/g, '').trim().slice(0, 32);
-    if (!name) {
-      send(ws, { type: 'error', code: 'BAD_TEAM_NAME' });
+
+    const name = rawName.replace(/[\u0000-\u001f\u007f]/g, '').trim();
+    if (!/^[\p{L}\p{N}][\p{L}\p{N} _-]{1,22}[\p{L}\p{N}]$/u.test(name)) {
+      send(ws, { type: 'error', code: 'BAD_TEAM_NAME', message: 'Team names must be 3-24 letters, numbers, spaces, hyphens or underscores.' });
       return;
     }
-    const team = currentTeams(now).find((entry) => entry.teamId === rawTeamId);
-    if (!team || !team.memberNodeIds.includes(client.nodeId)) {
+
+    if (name.length > 24) {
+      send(ws, { type: 'error', code: 'BAD_TEAM_NAME', message: 'Team names must be 3-24 characters.' });
+      return;
+    }
+    const description = typeof rawDescription === 'string'
+      ? rawDescription.replace(/[\u0000-\u001f\u007f]/g, '').trim().slice(0, 160)
+      : '';
+    const teams = currentTeams(now);
+    const team = teams.find((entry) => entry.teamId === rawTeamId);
+    if (!team || team.leaderNodeId !== client.nodeId) {
       send(ws, { type: 'error', code: 'TEAM_NOT_FOUND' });
       return;
     }
@@ -768,10 +1001,59 @@ export async function createGameServer(options: GameServerOptions = {}): Promise
       send(ws, { type: 'error', code: 'TEAM_NOT_FOUND' });
       return;
     }
-    if (record.name === null) {
+    const duplicate = teams.some((entry) =>
+      entry.teamId !== team.teamId &&
+      entry.name !== null &&
+      entry.name.localeCompare(name, undefined, { sensitivity: 'accent' }) === 0,
+    );
+    if (duplicate) {
+      send(ws, { type: 'error', code: 'TEAM_NAME_TAKEN' });
+      return;
+    }
+    if (supabase) {
+      try {
+        const existing = await supabase.getTeamByName(name);
+        if (existing && existing.team_id !== team.teamId) {
+          send(ws, { type: 'error', code: 'TEAM_NAME_TAKEN' });
+          return;
+        }
+      } catch {
+        send(ws, { type: 'error', code: 'TEAM_NAME_LOOKUP_FAILED' });
+        return;
+      }
+    }
+    if (record.name === null || record.leaderNodeId === client.nodeId) {
       record.name = sanitizeName(name);
+      record.description = description || null;
       saveTeamState();
+      syncSmoke(`/api/v1/internal/rooms/${encodeURIComponent(team.roomId)}/team`, {
+        teamId: team.teamId, teamName: record.name,
+      }, `team:${team.teamId}:${record.name}:${now}`);
       broadcastSnapshot();
+    }
+  }
+
+  function handleSmokeInvite(ws: WebSocket, client: ClientConnection, rawTeamId: unknown, now: number): void {
+    if (!client.ready || !client.nodeId || typeof rawTeamId !== 'string') {
+      send(ws, { type: 'error', code: 'BAD_MESSAGE' });
+      return;
+    }
+    const team = currentTeams(now).find((entry) => entry.teamId === rawTeamId);
+    if (!team || !team.memberNodeIds.includes(client.nodeId)) {
+      send(ws, { type: 'error', code: 'SMOKE_INVITE_NOT_AUTHORIZED' });
+      return;
+    }
+    const fromName = line.state.nodes[client.nodeId]?.name ?? client.nodeId;
+    for (const memberNodeId of team.memberNodeIds) {
+      if (memberNodeId === client.nodeId) continue;
+      sendToNode(memberNodeId, {
+        type: 'smoke_invite',
+        teamId: team.teamId,
+        roomId: team.roomId,
+        teamName: team.name ?? team.teamId,
+        fromNodeId: client.nodeId,
+        fromName,
+      });
     }
   }
 
@@ -804,6 +1086,7 @@ export async function createGameServer(options: GameServerOptions = {}): Promise
     client.sessionId = sessionId;
     client.nodeId = joined.nodeId;
     client.ready = true;
+    client.lastHeartbeatAt = now;
     sessions.set(token, { sessionId, nodeId: joined.nodeId, name });
     saveSessions();
 
@@ -991,6 +1274,8 @@ export async function createGameServer(options: GameServerOptions = {}): Promise
       return;
     }
 
+    const existingTeamIds = new Set(currentTeams(now).map((team) => team.teamId));
+    const wasRemoved = offlineNodes.has(request.fromNodeId);
     const out = line.apply(
       {
         type: 'create_link',
@@ -1005,9 +1290,23 @@ export async function createGameServer(options: GameServerOptions = {}): Promise
 
     const result = out.result;
     if (result && 'requestId' in result && result.ok) {
+      offlineNodes.delete(request.fromNodeId);
       resolveRequest(request, 'accepted', { linkId: result.linkId });
       metrics.accepted++;
       metrics.requestAccepted++;
+      const team = currentTeams(now).find((entry) =>
+        entry.memberNodeIds.includes(request.fromNodeId) &&
+        entry.memberNodeIds.includes(request.toNodeId),
+      );
+      const teamRecord = team ? teamRecords.get(team.teamId) : undefined;
+      if (teamRecord && team && !existingTeamIds.has(team.teamId)) {
+        teamRecord.leaderNodeId = request.fromNodeId;
+        teamRecord.nameOwnerNodeId = request.fromNodeId;
+        saveTeamState();
+      }
+      if (teamRecord && team && wasRemoved) {
+        teamRecord.memberJoinedAt[request.fromNodeId] = now;
+      }
       sendRequestResult(request, 'accepted', { linkId: result.linkId });
       broadcastEvents(out.events as unknown as WireEvent[]);
       return;
@@ -1095,6 +1394,7 @@ export async function createGameServer(options: GameServerOptions = {}): Promise
   // 5 Hz authoritative tick: phase transitions, token grants, coalesced moves.
   const tickTimer = setInterval(() => {
     const started = clock();
+    checkOfflineNodes(started);
     expireDueRequests(started);
     const previousPhase = line.state.phase;
     const out = line.tick(started);
@@ -1163,6 +1463,20 @@ function json(res: ServerResponse, status: number, body: unknown): void {
   const payload = JSON.stringify(body);
   res.writeHead(status, { 'content-type': 'application/json; charset=utf-8' });
   res.end(payload);
+}
+
+async function readRequestJson(req: IncomingMessage): Promise<Record<string, unknown>> {
+  const chunks: Buffer[] = [];
+  for await (const chunk of req) chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+  if (!chunks.length) return {};
+  try {
+    const parsed: unknown = JSON.parse(Buffer.concat(chunks).toString('utf8'));
+    return parsed && typeof parsed === 'object' && !Array.isArray(parsed)
+      ? parsed as Record<string, unknown>
+      : {};
+  } catch {
+    return {};
+  }
 }
 
 function sanitizeName(raw: string): string {

@@ -23,11 +23,15 @@
     "smoke": "tsx tools/smoke/src/run.ts"
   },
   "devDependencies": {
+    "@supabase/supabase-js": "^2.57.4",
     "@types/node": "^26.6.5",
     "@types/ws": "^8.18.2",
     "fast-check": "^4.10.2",
     "tsx": "^4.23.15",
     "typescript": "^7.0.2",
     "vitest": "^5.0.5"
+  },
+  "dependencies": {
+    "@supabase/realtime-js": "^2.118.0"
   }
 }

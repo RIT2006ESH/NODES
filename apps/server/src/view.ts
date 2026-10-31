@@ -41,17 +41,18 @@ export function toLinks(state: LineState, areas: ReadonlyMap<string, 'main' | 's
   }));
 }
 
-export function toYou(state: LineState, config: GameConfig, nodeId: string | null): YouView {
+export function toYou(state: LineState, config: GameConfig, nodeId: string | null, onlineNodeIds: ReadonlySet<string> = new Set()): YouView {
   const node = nodeId ? state.nodes[nodeId] : undefined;
   if (!node) {
-    return { nodeId: null, tokens: 0, nextTokenInMs: 0, restoredRoutes: 0, offline: false };
+    return { nodeId: null, tokens: 0, nextTokenInMs: 0, restoredRoutes: 0, offline: false, networkStatus: 'disconnected' };
   }
   return {
     nodeId: node.id,
     tokens: node.tokens,
     nextTokenInMs: nextTokenInMs(node, state.now, config),
     restoredRoutes: node.restoredRoutes,
-    offline: node.status === 'disabled',
+    offline: !onlineNodeIds.has(node.id),
+    networkStatus: onlineNodeIds.has(node.id) ? 'connected' : 'disconnected',
   };
 }
 
@@ -107,7 +108,7 @@ export function toSnapshot(
     links: toLinks(state, areas),
     incomingRequests,
     outgoingRequests,
-    you: toYou(state, config, nodeId),
+    you:     toYou(state, config, nodeId, onlineNodeIds),
     lastScore: toScore(state),
     history: state.history.map((r) => r.score),
     stats: toStats(state),

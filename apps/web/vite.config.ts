@@ -12,10 +12,13 @@ export default defineConfig({
   },
   server: {
     port: 5173,
+    // Keep the browser same-origin while forwarding game and Smoke requests
+    // to the authoritative backend during local development.
     proxy: {
-      '/ws': { target: 'ws://localhost:8080', ws: true },
-      '/healthz': 'http://localhost:8080',
-      '/metrics': 'http://localhost:8080',
+      '/api': { target: process.env.MNG_SERVER_URL ?? 'http://localhost:10000' },
+      '/ws': { target: process.env.MNG_SERVER_URL?.replace(/^http/, 'ws') ?? 'ws://localhost:10000', ws: true },
+      '/healthz': process.env.MNG_SERVER_URL ?? 'http://localhost:10000',
+      '/metrics': process.env.MNG_SERVER_URL ?? 'http://localhost:10000',
     },
   },
   build: {

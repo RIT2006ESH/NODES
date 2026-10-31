@@ -6,3 +6,7 @@ reports/
 .env.*
 !.env.example
 *.log
+
+tools/bin/
+
+supabase/.temp/
