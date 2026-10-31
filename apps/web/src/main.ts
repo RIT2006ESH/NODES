@@ -286,13 +286,31 @@ let lastSeen = 0;
 let retry = 0;
 let reconnectTimer: number | null = null;
 
+function backendOrigin(): string {
+  const configured = import.meta.env.VITE_BACKEND_URL?.trim();
+  if (configured) {
+    return configured.replace(/\/+$/, '');
+  }
+  return location.origin;
+}
+
 function wsUrl(): string {
-  const protocol = location.protocol === 'https:' ? 'wss' : 'ws';
+  const configured = import.meta.env.VITE_BACKEND_URL?.trim();
+  let baseWs: string;
+  if (configured) {
+    const parsed = new URL(configured);
+    const wsProto = parsed.protocol === 'https:' ? 'wss:' : 'ws:';
+    baseWs = `${wsProto}//${parsed.host}`;
+  } else {
+    const protocol = location.protocol === 'https:' ? 'wss' : 'ws';
+    baseWs = `${protocol}://${location.host}`;
+  }
+
   const params = new URLSearchParams();
   if (spectator) params.set('spectate', '1');
   else if (token) params.set('token', token);
   const query = params.toString();
-  return `${protocol}://${location.host}/ws${query ? `?${query}` : ''}`;
+  return `${baseWs}/ws${query ? `?${query}` : ''}`;
 }
 
 function connect(): void {
@@ -1387,7 +1405,7 @@ function renderTeamLeaderboard(): void {
       return;
     }
     el.openSmokeRoom.disabled = true;
-    fetch('/api/integration/rooms/authorize', {
+    fetch(`${backendOrigin()}/api/integration/rooms/authorize`, {
       method: 'POST',
       headers: { 'content-type': 'application/json', authorization: `Bearer ${sessionToken}` },
       body: JSON.stringify({ roomId: team.roomId }),

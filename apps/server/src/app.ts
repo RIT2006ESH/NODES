@@ -670,6 +670,20 @@ export async function createGameServer(options: GameServerOptions = {}): Promise
   });
 
   async function handleHttp(req: IncomingMessage, res: ServerResponse): Promise<void> {
+    const origin = req.headers.origin;
+    if (origin) {
+      res.setHeader('Access-Control-Allow-Origin', origin);
+      res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+      res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+      res.setHeader('Access-Control-Allow-Credentials', 'true');
+    }
+
+    if (req.method === 'OPTIONS') {
+      res.writeHead(204);
+      res.end();
+      return;
+    }
+
     const url = new URL(req.url ?? '/', `http://${req.headers.host ?? 'localhost'}`);
 
     if (url.pathname === '/api/profile/availability' && req.method === 'GET') {
