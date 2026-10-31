@@ -176,8 +176,6 @@ export interface DrawOptions {
   readonly highlightId: string | null;
   readonly highlightUntil: number;
   readonly worldRadius: number;
-<<<<<<< HEAD
-=======
   /** Single points of failure in the largest group; drawn as amber warning rings. */
   readonly weakIds?: ReadonlySet<string>;
   /** Likely Hub-strike targets, drawn as red reticles during Warning. */
@@ -195,7 +193,6 @@ function hash01(text: string): number {
     h = Math.imul(h, 16777619);
   }
   return ((h >>> 0) % 1000) / 1000;
->>>>>>> origin/prince
 }
 
 export function drawBoard(options: DrawOptions): void {
@@ -213,11 +210,8 @@ export function drawBoard(options: DrawOptions): void {
   for (let y = 0; y < options.height; y += grid) ctx.fillRect(0, y, options.width, 1);
   ctx.restore();
 
-<<<<<<< HEAD
-=======
   options.backdrop?.(ctx);
 
->>>>>>> origin/prince
   const linkList = [...links.values()];
   const comp = componentIndex(linkList, nodes);
 
@@ -256,8 +250,6 @@ export function drawBoard(options: DrawOptions): void {
       ctx.stroke();
       ctx.globalAlpha = 1;
 
-<<<<<<< HEAD
-=======
       // Ambient traffic: a faint packet drifts along every live link so a healthy
       // network visibly hums and a cut one visibly goes quiet.
       if (options.flow && !dimmed && linkList.length <= 260) {
@@ -277,7 +269,6 @@ export function drawBoard(options: DrawOptions): void {
         ctx.globalAlpha = 1;
       }
 
->>>>>>> origin/prince
       const pulseEnd = options.pulseLinks?.get(link.id) ?? 0;
       if (pulseEnd > now) {
         const progress = 1 - (pulseEnd - now) / 900;
@@ -393,8 +384,6 @@ export function drawBoard(options: DrawOptions): void {
       ctx.strokeStyle = previewGroup % 2 ? '#ffc66d' : '#468dff'; ctx.globalAlpha = .28; ctx.lineWidth = 1; ctx.stroke(); ctx.globalAlpha = 1;
     }
 
-<<<<<<< HEAD
-=======
     // Strategy overlay: amber = removing this node would split the group
     // (a single point of failure); red reticle = what a Hub strike would hunt.
     if (!disabled && !dimmed && options.weakIds?.has(node.id)) {
@@ -426,7 +415,6 @@ export function drawBoard(options: DrawOptions): void {
       ctx.restore();
     }
 
->>>>>>> origin/prince
     // Search/leaderboard discovery highlight. This is purely visual: it does
     // not select a request target or create a connection.
     if (options.highlightId === node.id && now < options.highlightUntil) {

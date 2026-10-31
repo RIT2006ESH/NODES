@@ -61,6 +61,13 @@ body[data-phase="warning"] .phaseMetric b { color:var(--amber); } body[data-phas
 #outgoing { position:fixed; left:24px; bottom:60px; z-index:15; display:flex; flex-direction:column; gap:6px; } #outgoing:empty { display:none; } .outgoingItem { padding:8px 11px; border:1px dashed rgba(255,198,109,.5); border-radius:9px; background:rgba(16,24,39,.9); } .outgoingLabel { color:var(--amber); font-size:9px; } .outgoingName { font-size:11px; }
 #banner { position:fixed; z-index:20; top:0; left:0; right:0; padding:8px; text-align:center; font-size:11px; background:rgba(255,102,125,.16); color:#ffd9df; border-bottom:1px solid rgba(255,102,125,.35); } #banner.info { background:rgba(255,198,109,.14); color:#ffe9b8; border-bottom-color:rgba(255,198,109,.3); }
 #toasts { position:fixed; z-index:25; left:50%; bottom:72px; transform:translateX(-50%); display:flex; flex-direction:column; gap:7px; align-items:center; pointer-events:none; } .toast { padding:9px 13px; border:1px solid var(--border); border-radius:9px; background:rgba(16,24,39,.96); box-shadow:0 12px 35px rgba(0,0,0,.45); font-size:11px; animation:rise .2s ease; } .toast.good { border-color:rgba(130,232,204,.45); } .toast.bad { border-color:rgba(255,102,125,.45); } @keyframes rise { from { opacity:0; transform:translateY(6px); } to { opacity:1; transform:none; } }
+.smokeInvitePopup { position:fixed; z-index:32; right:24px; bottom:116px; width:min(340px,calc(100vw - 32px)); padding:14px; border:1px solid rgba(130,232,204,.42); border-radius:13px; background:rgba(16,24,39,.97); box-shadow:0 18px 55px rgba(0,0,0,.55); }
+.smokeInvitePopup[hidden] { display:none; }
+.smokeInvitePopup strong { color:var(--mint); font-size:10px; letter-spacing:1px; }
+.smokeInvitePopup p { margin:7px 0 11px; font-size:12px; }
+.smokeInviteActions { display:flex; gap:8px; }
+.smokeInviteActions button { padding:7px 10px; border:1px solid var(--border); border-radius:7px; background:rgba(7,10,18,.7); color:var(--text); font:inherit; font-size:10px; cursor:pointer; }
+.smokeInviteActions button:first-child { border-color:rgba(130,232,204,.45); color:var(--mint); }
 .libp2pPopup { position:fixed; z-index:32; right:24px; bottom:116px; display:flex; gap:11px; width:min(360px,calc(100vw - 32px)); padding:14px; border:1px solid rgba(105,213,255,.32); border-radius:13px; background:rgba(16,24,39,.96); box-shadow:0 18px 55px rgba(0,0,0,.55); backdrop-filter:blur(14px); animation:popupIn .2s ease; } .libp2pPopup[hidden] { display:none; } @keyframes popupIn { from { opacity:0; transform:translateY(8px); } to { opacity:1; transform:none; } } .libp2pPopupIcon { display:grid; place-items:center; flex:0 0 27px; height:27px; border:1px solid rgba(105,213,255,.55); border-radius:8px; color:var(--cyan); font-size:17px; } .libp2pPopupBody { min-width:0; } .libp2pPopupTitle { margin-bottom:5px; color:var(--cyan); font-size:9px; letter-spacing:1px; text-transform:uppercase; } .libp2pPopupBody strong { font-size:12px; } .libp2pPopupBody p { margin:6px 0 0; color:var(--muted); font-size:10.5px; line-height:1.45; } .libp2pPopupBody .conceptLabel { color:var(--mint); font-weight:700; } .libp2pPopupBody .why { color:#b6c8e3; } .libp2pPopupBody code { color:#c5eaff; font:10px ui-monospace,monospace; } .libp2pPopupActions { display:flex; gap:8px; margin-top:10px; } .libp2pPopupActions button { padding:6px 9px; border:1px solid var(--border); border-radius:7px; background:rgba(7,10,18,.65); color:var(--text); font:inherit; font-size:10px; cursor:pointer; } .libp2pPopupActions .popupLearn { border-color:rgba(105,213,255,.36); color:var(--cyan); }
 #join { position:fixed; inset:0; z-index:30; display:grid; place-items:center; background:rgba(4,6,13,.7); backdrop-filter:blur(10px); } #join[hidden] { display:none; } .card { width:min(92vw,420px); padding:32px; background:rgba(16,24,39,.95); border:1px solid rgba(105,213,255,.25); border-radius:20px; box-shadow:0 30px 90px rgba(0,0,0,.65); } .card h1 { margin:0 0 8px; font-size:25px; letter-spacing:-.4px; } .card .sub { margin:0 0 5px; font-size:15px; } .card .note,.card .legal { color:var(--muted); font-size:11px; } .card label { display:block; margin:22px 0 7px; color:var(--muted); font-size:10px; letter-spacing:1px; text-transform:uppercase; } .card input { width:100%; padding:13px; border:1px solid var(--border); border-radius:9px; background:#0b1120; color:var(--text); font:inherit; } .card input:focus { outline:2px solid rgba(105,213,255,.5); } .card button { width:100%; margin-top:14px; padding:13px; border:0; border-radius:9px; background:linear-gradient(135deg,var(--mint),var(--cyan)); color:#06111a; font:inherit; font-weight:750; cursor:pointer; } .card .legal { text-align:center; margin:18px 0 0; }
 body.screen #hud,body.screen #join,body.screen .gameControls,body.screen #hint,body.screen #requests,body.screen #requestBar,body.screen #outgoing,body.screen #searchPanel,body.screen #leaderboard,body.screen .worldTag { display:none; }
@@ -142,15 +149,25 @@ body.screen #hud,body.screen #join,body.screen .gameControls,body.screen #hint,b
 .teamRowName { overflow:hidden; font-size:10px; font-weight:650; text-overflow:ellipsis; white-space:nowrap; }
 .teamRowMeta { color:var(--muted); font-size:8px; }
 .teamRowCount { color:var(--mint); font-size:9px; }
+.teamSmokeButton { align-self:flex-start; margin-top:3px; padding:3px 6px; border:1px solid rgba(130,232,204,.35); border-radius:5px; background:rgba(130,232,204,.12); color:var(--mint); font-size:7px; font-weight:700; letter-spacing:.04em; cursor:pointer; }
+.teamSmokeButton:disabled { opacity:.5; cursor:wait; }
 .teamEmpty { color:var(--muted); font-size:9px; line-height:1.35; }
+.smokeRoomPanel { margin:0 0 12px; padding:10px; border:1px solid rgba(130,232,204,.2); border-radius:9px; background:rgba(130,232,204,.04); }
+.smokeRoomHead { display:flex; justify-content:space-between; gap:8px; align-items:baseline; }
+.smokeRoomHead b { color:var(--cyan); font-size:9px; letter-spacing:1px; }
+.smokeRoomHead span { color:var(--muted); font-size:7px; }
+.smokeRoomDetails { margin-top:6px; color:var(--muted); font-size:8px; line-height:1.4; }
+.smokeRoomActions { display:flex; gap:4px; flex-wrap:wrap; margin-top:8px; }
+.smokeRoomActions button { padding:5px 6px; border:1px solid rgba(130,232,204,.28); border-radius:5px; background:rgba(130,232,204,.1); color:var(--mint); font-size:7px; cursor:pointer; }
+.smokeRoomActions button:disabled { opacity:.45; cursor:not-allowed; }
 .teamNameDialog { position:fixed; inset:0; z-index:42; display:grid; place-items:center; padding:18px; background:rgba(4,6,13,.62); backdrop-filter:blur(7px); }
 .teamNameDialog[hidden] { display:none; }
 .teamNameCard { width:min(92vw,390px); padding:24px; border:1px solid rgba(130,232,204,.35); border-radius:16px; background:rgba(16,24,39,.98); box-shadow:0 25px 80px rgba(0,0,0,.7); }
 .teamNameCard h2 { margin:0 0 8px; font-size:20px; }
 .teamNameCard > p:not(.eyebrow) { margin:0; color:var(--muted); font-size:11px; line-height:1.45; }
 .teamNameCard label { display:block; margin:18px 0 7px; color:var(--muted); font-size:9px; letter-spacing:1px; text-transform:uppercase; }
-.teamNameCard input { width:100%; min-height:44px; padding:11px; border:1px solid var(--border); border-radius:8px; background:#0b1120; color:var(--text); font:inherit; }
-.teamNameCard input:focus { outline:2px solid rgba(130,232,204,.5); }
+.teamNameCard input,.teamNameCard textarea { width:100%; min-height:44px; padding:11px; border:1px solid var(--border); border-radius:8px; background:#0b1120; color:var(--text); font:inherit; resize:vertical; }
+.teamNameCard input:focus,.teamNameCard textarea:focus { outline:2px solid rgba(130,232,204,.5); }
 .teamNameActions { display:flex; gap:8px; margin-top:12px; }
 .teamNameActions button { flex:1; min-height:44px; padding:9px; border:1px solid var(--border); border-radius:8px; background:rgba(7,10,18,.7); color:var(--text); font:inherit; font-size:11px; cursor:pointer; touch-action:manipulation; }
 .teamNameActions #teamNameSave { border:0; background:linear-gradient(135deg,var(--mint),var(--cyan)); color:#07111a; font-weight:700; }
@@ -168,8 +185,6 @@ body.screen #hud,body.screen #join,body.screen .gameControls,body.screen #hint,b
   .playerCard { left:12px !important; right:12px; bottom:calc(166px + env(safe-area-inset-bottom, 0px)); top:auto !important; width:auto; max-height:38vh; overflow:auto; }
   .learnPanel { z-index:45; }
 }
-<<<<<<< HEAD
-=======
 
 /* ------------------------------------------------------------------------
    Gameplay layer: integrity readout, weak-point chip, rank, result card, FX.
@@ -231,4 +246,3 @@ body.recoverFlash::after { box-shadow:inset 0 0 130px rgba(130,232,204,.3); anim
   .resultCard { top:30%; }
   .resultGrade { font-size:64px; }
 }
->>>>>>> origin/prince

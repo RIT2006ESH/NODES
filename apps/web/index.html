@@ -20,10 +20,7 @@
         <div class="metric phaseMetric"><span class="metricLabel">phase</span><b id="phase">seeding</b><small id="countdown">—</small></div>
         <div class="metric"><span class="metricLabel">last score</span><b id="score">—</b></div>
         <div class="metric healthMetric"><span class="metricLabel">network health</span><b id="health">—</b><span class="healthTrack"><i></i></span></div>
-<<<<<<< HEAD
-=======
         <div class="metric integrityMetric" title="Live preview of reach and redundancy, before the speed bonus"><span class="metricLabel">integrity</span><b id="integrity">—</b><button id="weakChip" type="button" class="weakChip" hidden></button></div>
->>>>>>> origin/prince
       </div>
       <div class="tokens" id="tokens" title="Link tokens">
         <span class="tokenLabel">LINK TOKENS</span>
@@ -61,6 +58,15 @@
           <div class="teamBoardHead"><b id="teamBoardTitle">TEAM LEADERBOARD</b><span><strong id="teamGroupCount">0</strong> active groups</span></div>
           <div id="teamList" class="teamList"></div>
         </section>
+        <section id="smokeRoomPanel" class="smokeRoomPanel" aria-labelledby="smokeRoomTitle">
+          <div class="smokeRoomHead"><b id="smokeRoomTitle">SMOKE ROOM</b><span id="smokeRoomStatus">NO ACTIVE TEAM</span></div>
+          <div id="smokeRoomDetails" class="smokeRoomDetails">Connect two active players to create a team and unlock your private communication room.</div>
+          <div class="smokeRoomActions">
+            <button id="openSmokeRoom" type="button" disabled>OPEN SMOKE ROOM</button>
+            <button id="inviteSmokeMembers" type="button" disabled>INVITE TEAM MEMBERS</button>
+            <button id="viewSmokeMembers" type="button" disabled>VIEW MEMBERS</button>
+          </div>
+        </section>
         <p class="lbCaption">Repairs · active links · no separate team score</p>
         <div class="lbColumns" aria-hidden="true">
           <span>#</span><span>Player</span><span>Repairs</span><span>Links</span>
@@ -70,28 +76,22 @@
     </aside>
 
     <div class="worldTag"><span></span> SHARED WORLD <b id="worldCount">—</b></div>
-<<<<<<< HEAD
-=======
     <button id="operator" class="operator" type="button" title="Your rank on this device. Cosmetic only." hidden>
       <span class="opLevel" id="opLevel">1</span>
       <span class="opBody"><b id="opTitle">Packet</b><small id="opXp">0 XP</small><i class="opTrack"><u id="opBar"></u></i></span>
     </button>
     <aside id="resultCard" class="resultCard" hidden role="status" aria-live="polite"></aside>
     <div id="achievements" class="achievements" hidden role="dialog" aria-label="Achievements"></div>
->>>>>>> origin/prince
     <aside id="activityFeed" class="activityFeed" aria-label="Live network activity" aria-live="polite"><div class="activityTitle">LIVE ACTIVITY</div><div id="activityItems"></div></aside>
     <div id="hint"><kbd>WASD</kbd> Move your node <span>·</span> Select a player to connect</div>
     <div class="gameControls" aria-label="Game controls">
       <button id="pingNetwork" class="pingNetwork" type="button">◌ PING NETWORK</button>
       <button id="learnLibp2p" class="learnLink" type="button">◈ Learn libp2p</button>
       <button id="findMe" type="button"><span aria-hidden="true">⌖</span> Find my node</button>
-<<<<<<< HEAD
-=======
       <div class="fxRow">
         <button id="toggleWeak" type="button" class="fxToggle on" aria-pressed="true" title="Weak-point radar: nodes whose loss would split the network"><span aria-hidden="true">◬</span><small>Radar</small></button>
         <button id="toggleSound" type="button" class="fxToggle" aria-pressed="false" title="Sound effects"><span aria-hidden="true">♪</span><small>Sound</small></button>
       </div>
->>>>>>> origin/prince
     </div>
     <aside id="pulseResult" class="pulseResult" hidden role="status" aria-live="polite"></aside>
     <aside id="failurePreview" class="failurePreview" hidden role="status" aria-live="polite"></aside>
@@ -140,12 +140,14 @@
     </section>
     <section id="teamNameDialog" class="teamNameDialog" hidden role="dialog" aria-modal="true" aria-labelledby="teamNameTitle">
       <div class="teamNameCard">
-        <p class="eyebrow">Your network is growing</p>
-        <h2 id="teamNameTitle">Give your team a name</h2>
-        <p>Accepted links connect real players into one shared team. Choose a name everyone can see.</p>
+        <p class="eyebrow">Mesh leadership assigned</p>
+        <h2 id="teamNameTitle">Create your team</h2>
+        <p>You established this mesh, so choose the name everyone can see.</p>
         <label for="teamNameInput">Team name</label>
-        <input id="teamNameInput" maxlength="32" autocomplete="off" placeholder="e.g. Monsoon Mesh" />
-        <div class="teamNameActions"><button id="teamNameSave" type="button">Save team name</button><button id="teamNameLater" type="button">Later</button></div>
+        <input id="teamNameInput" maxlength="24" autocomplete="off" placeholder="e.g. Monsoon Mesh" />
+        <label for="teamDescriptionInput">Description <span>(optional)</span></label>
+        <textarea id="teamDescriptionInput" maxlength="160" rows="3" placeholder="What are you building together?"></textarea>
+        <div class="teamNameActions"><button id="teamNameSave" type="button">Create team</button><button id="teamNameLater" type="button">Later</button></div>
       </div>
     </section>
     <div id="banner" hidden></div>
@@ -164,6 +166,7 @@
     </div>
     <div id="outgoing" aria-live="polite"></div>
     <div id="toasts" aria-live="polite"></div>
+    <aside id="smokeInvitePopup" class="smokeInvitePopup" hidden role="status" aria-live="polite"></aside>
     <aside id="libp2pPopup" class="libp2pPopup" hidden role="status" aria-live="polite"></aside>
 
     <section id="join">

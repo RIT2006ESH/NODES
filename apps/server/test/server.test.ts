@@ -412,9 +412,71 @@ describe('connection requests', () => {
     if (formed.type !== 'delta') throw new Error('expected team delta');
     const team = formed.teams.find((entry) => entry.memberNodeIds.length === 2);
     if (!team) throw new Error('team was not formed');
-    a.client.send({ type: 'team_name', teamId: team.teamId, name: 'Monsoon Mesh' });
+    expect(team.nameOwnerNodeId).toBe(a.nodeId);
+    expect(team.leaderNodeId).toBe(a.nodeId);
+    expect(team.roomId).toBe(team.teamId);
+    b.client.send({ type: 'team_name', teamId: team.teamId, name: 'Not The Leader' });
+    const unauthorized = await b.client.wait((message) => message.type === 'error' && message.code === 'TEAM_NOT_FOUND');
+    expect(unauthorized.type).toBe('error');
+    a.client.send({ type: 'team_name', teamId: team.teamId, name: 'Monsoon Mesh', description: 'Connected by consent.' });
     const named = await b.client.wait((m) => m.type === 'snapshot' && m.teams.some((entry) => entry.teamId === team.teamId && entry.name === 'Monsoon Mesh'));
     expect(named.type === 'snapshot' && named.teams[0]?.name).toBe('Monsoon Mesh');
+    expect(named.type === 'snapshot' && named.teams.find((entry) => entry.teamId === team.teamId)?.description).toBe('Connected by consent.');
+  });
+
+  it('removes a timed-out leader, succeeds the earliest active member, and allows former-leader rejoin', async () => {
+    await server.close();
+    await start({ offlineTimeoutMs: 100 });
+    const [leader, successor, member] = await players(3);
+    await connect(leader!, successor!);
+    await connect(successor!, member!);
+    successor!.client.send({ type: 'ping', t: Date.now() });
+    member!.client.send({ type: 'ping', t: Date.now() });
+    leader!.client.close();
+
+    await new Promise((resolve) => setTimeout(resolve, 60));
+    successor!.client.send({ type: 'ping', t: Date.now() });
+    member!.client.send({ type: 'ping', t: Date.now() });
+    const changed = await successor!.client.wait(
+      (message) => message.type === 'mesh_event' && message.event.type === 'mesh.leader_changed',
+      1000,
+    );
+    expect(changed.type === 'mesh_event' && changed.event.type === 'mesh.leader_changed' && changed.event.leaderNodeId).toBe(successor!.nodeId);
+
+    successor!.client.send({ type: 'resync' });
+    const afterRemoval = await successor!.client.wait((message) =>
+      message.type === 'snapshot' &&
+      message.teams.some((team) => team.leaderNodeId === successor!.nodeId && !team.memberNodeIds.includes(leader!.nodeId)),
+    );
+    if (afterRemoval.type !== 'snapshot') throw new Error('expected post-removal snapshot');
+    const team = afterRemoval.teams.find((entry) => entry.leaderNodeId === successor!.nodeId);
+    if (!team) throw new Error('missing successor team');
+    successor!.client.send({ type: 'team_name', teamId: team.teamId, name: 'Renamed Mesh' });
+    const renamed = await member!.client.wait((message) =>
+      message.type === 'snapshot' &&
+      message.teams.some((entry) => entry.teamId === team.teamId && entry.name === 'Renamed Mesh'),
+    );
+    expect(renamed.type).toBe('snapshot');
+
+    const resumed = await open(`?token=${encodeURIComponent(leader!.token)}`);
+    await resumed.wait((message) => message.type === 'welcome');
+    const formerLeaderSnapshot = await resumed.wait((message) => message.type === 'snapshot');
+    if (formerLeaderSnapshot.type !== 'snapshot') throw new Error('expected former leader snapshot');
+    expect(formerLeaderSnapshot.teams.some((entry) => entry.memberNodeIds.includes(leader!.nodeId))).toBe(false);
+  });
+
+  it('does not remove a member that reconnects before the timeout', async () => {
+    await server.close();
+    await start({ offlineTimeoutMs: 150 });
+    const [leader, member] = await players(2);
+    await connect(leader!, member!);
+    member!.client.close();
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    const resumed = await open(`?token=${encodeURIComponent(member!.token)}`);
+    await resumed.wait((message) => message.type === 'welcome');
+    const snapshot = await resumed.wait((message) => message.type === 'snapshot');
+    if (snapshot.type !== 'snapshot') throw new Error('expected resumed snapshot');
+    expect(snapshot.teams.some((entry) => entry.memberNodeIds.includes(member!.nodeId))).toBe(true);
   });
 
   it('represents a five-node connected chain as one active team', async () => {
