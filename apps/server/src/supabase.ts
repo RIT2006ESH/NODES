@@ -1,6 +1,6 @@
 import { createClient } from '@supabase/supabase-js';
 import type { TeamView } from '@mng/protocol';
-import { validateUsername } from './username.js';
+import { validateUsername, canonicalUsername, generateFallbackUsername } from './username.js';
 
 type ProfileRow = {
   node_id: string;
@@ -8,8 +8,7 @@ type ProfileRow = {
 };
 
 function fallbackUsername(nodeId: string): string {
-  const value = nodeId.replace(/[^A-Za-z0-9_]/g, '_').slice(0, 20);
-  return value.length >= 3 ? value : `${value}___`.slice(0, 3);
+  return generateFallbackUsername(nodeId, () => false);
 }
 
 export interface SupabaseStore {
@@ -45,7 +44,7 @@ export function createSupabaseStore(): SupabaseStore | null {
     const { data, error } = await client
       .from('player_profiles')
       .select('node_id,username')
-      .eq('username_normalized', username.toLowerCase())
+      .eq('username_normalized', canonicalUsername(username))
       .maybeSingle();
     if (error) throw error;
     return data;
@@ -67,13 +66,14 @@ export function createSupabaseStore(): SupabaseStore | null {
     return data as T;
   }
 
-  async function saveUsername(nodeId: string, username: string, upsert: boolean): Promise<{ ok: true; profile: ProfileRow } | { ok: false; code: string }> {
+  async function saveUsername(nodeId: string, username: string): Promise<{ ok: true; profile: ProfileRow } | { ok: false; code: string }> {
     const valid = validateUsername(username);
     if (!valid) return { ok: false, code: 'INVALID_USERNAME' };
-    const operation = upsert
-      ? client.from('player_profiles').upsert({ node_id: nodeId, username: valid }, { onConflict: 'node_id' }).select('node_id,username').single()
-      : client.from('player_profiles').insert({ node_id: nodeId, username: valid }).select('node_id,username').single();
-    const { data, error } = await operation;
+    const { data, error } = await client
+      .from('player_profiles')
+      .upsert({ node_id: nodeId, username: valid }, { onConflict: 'node_id' })
+      .select('node_id,username')
+      .single();
     if (error) {
       if (error.code === '23505') return { ok: false, code: 'USERNAME_TAKEN' };
       throw error;
@@ -89,8 +89,8 @@ export function createSupabaseStore(): SupabaseStore | null {
     getProfile,
     getProfileByUsername,
     getTeamByName,
-    registerUsername: (nodeId, username) => saveUsername(nodeId, username, false),
-    updateUsername: (nodeId, username) => saveUsername(nodeId, username, true),
+    registerUsername: (nodeId, username) => saveUsername(nodeId, username),
+    updateUsername: (nodeId, username) => saveUsername(nodeId, username),
     async syncTeams(teams) {
       for (const team of teams) {
         for (const nodeId of team.memberNodeIds) {
