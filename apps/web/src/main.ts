@@ -486,6 +486,18 @@ function handleError(code: string): void {
     toast('That team changed — refresh the network view', 'bad');
     return;
   }
+  if (code === 'USERNAME_TAKEN') {
+    showJoin();
+    toast('That username is already taken. Please choose another.', 'bad');
+    el.name.focus();
+    return;
+  }
+  if (code === 'INVALID_USERNAME') {
+    showJoin();
+    toast('Usernames must be 3-20 letters, numbers, or underscores.', 'bad');
+    el.name.focus();
+    return;
+  }
   toast('Could not confirm, try again', 'bad');
 }
 

@@ -1,6 +1,6 @@
 import { createClient } from '@supabase/supabase-js';
 import type { TeamView } from '@mng/protocol';
-import { validateUsername } from './username.js';
+import { validateUsername, canonicalUsername, generateFallbackUsername } from './username.js';
 
 type ProfileRow = {
   node_id: string;
@@ -8,8 +8,7 @@ type ProfileRow = {
 };
 
 function fallbackUsername(nodeId: string): string {
-  const value = nodeId.replace(/[^A-Za-z0-9_]/g, '_').slice(0, 20);
-  return value.length >= 3 ? value : `${value}___`.slice(0, 3);
+  return generateFallbackUsername(nodeId, () => false);
 }
 
 export interface SupabaseStore {
@@ -45,7 +44,7 @@ export function createSupabaseStore(): SupabaseStore | null {
     const { data, error } = await client
       .from('player_profiles')
       .select('node_id,username')
-      .eq('username_normalized', username.toLowerCase())
+      .eq('username_normalized', canonicalUsername(username))
       .maybeSingle();
     if (error) throw error;
     return data;

@@ -29,7 +29,7 @@ import type {
 } from '@mng/protocol';
 import { LineHost } from './line.js';
 import { toScore, toSnapshot, toStats, toYou } from './view.js';
-import { validateUsername } from './username.js';
+import { validateUsername, canonicalUsername, generateFallbackUsername } from './username.js';
 
 interface ClientConnection {
   ws: WebSocket;
@@ -153,6 +153,7 @@ export async function createGameServer(options: GameServerOptions = {}): Promise
   const clients = new Map<WebSocket, ClientConnection>();
   const offlineNodes = new Set<string>();
   const sessions = new Map<string, { sessionId: string; nodeId: string; name: string }>();
+  const inFlightUsernames = new Set<string>();
   const sessionsPath = persistPath.replace(/\.json$/, '.sessions.json');
   const teamStatePath = persistPath.replace(/\.json$/, '.teams.json');
   const rate = new Map<string, number[]>();
@@ -647,14 +648,28 @@ export async function createGameServer(options: GameServerOptions = {}): Promise
     const url = new URL(req.url ?? '/', `http://${req.headers.host ?? 'localhost'}`);
 
     if (url.pathname === '/api/profile/availability' && req.method === 'GET') {
-      if (!supabase) { json(res, 503, { error: 'Supabase is not configured' }); return; }
       const username = validateUsername(url.searchParams.get('username') ?? '');
       if (!username) { json(res, 400, { available: false, error: 'INVALID_USERNAME' }); return; }
-      try {
-        const existing = await supabase.getProfileByUsername?.(username);
-        json(res, 200, { available: !existing });
-      } catch {
-        json(res, 503, { available: false, error: 'PROFILE_LOOKUP_FAILED' });
+      const canonical = canonicalUsername(username);
+
+      const takenInMemory = inFlightUsernames.has(canonical)
+        || [...sessions.values()].some((s) => canonicalUsername(s.name) === canonical)
+        || Object.values(line.state.nodes).some((n) => canonicalUsername(n.name) === canonical);
+
+      if (takenInMemory) {
+        json(res, 200, { available: false });
+        return;
+      }
+
+      if (supabase) {
+        try {
+          const existing = await supabase.getProfileByUsername(canonical);
+          json(res, 200, { available: !existing });
+        } catch {
+          json(res, 503, { available: false, error: 'PROFILE_LOOKUP_FAILED' });
+        }
+      } else {
+        json(res, 200, { available: true });
       }
       return;
     }
@@ -666,12 +681,48 @@ export async function createGameServer(options: GameServerOptions = {}): Promise
       const session = sessionToken ? sessions.get(sessionToken) : undefined;
       if (!session) { json(res, 401, { error: 'valid NODES session token required' }); return; }
       const input = await readRequestJson(req);
-      const result = url.pathname.endsWith('/register')
-        ? await supabase.registerUsername(session.nodeId, String(input.username ?? ''))
-        : await supabase.updateUsername(session.nodeId, String(input.username ?? ''));
-      if (!result.ok) { json(res, result.code === 'INVALID_USERNAME' ? 400 : 409, { error: result.code }); return; }
-      json(res, 200, { profile: result.profile });
-      return;
+      const rawUsername = String(input.username ?? '');
+      const valid = validateUsername(rawUsername);
+      if (!valid) { json(res, 400, { error: 'INVALID_USERNAME' }); return; }
+      const canonical = canonicalUsername(valid);
+
+      if (inFlightUsernames.has(canonical)) {
+        json(res, 409, { error: 'USERNAME_TAKEN' });
+        return;
+      }
+
+      const conflictInMemory = [...sessions.values()].some(
+        (s) => s.nodeId !== session.nodeId && canonicalUsername(s.name) === canonical,
+      ) || Object.values(line.state.nodes).some(
+        (n) => n.id !== session.nodeId && canonicalUsername(n.name) === canonical,
+      );
+      if (conflictInMemory) {
+        json(res, 409, { error: 'USERNAME_TAKEN' });
+        return;
+      }
+
+      inFlightUsernames.add(canonical);
+      try {
+        const result = url.pathname.endsWith('/register')
+          ? await supabase.registerUsername(session.nodeId, valid)
+          : await supabase.updateUsername(session.nodeId, valid);
+        if (!result.ok) {
+          json(res, result.code === 'INVALID_USERNAME' ? 400 : 409, { error: result.code });
+          return;
+        }
+
+        session.name = valid;
+        if (line.state.nodes[session.nodeId]) {
+          line.state.nodes[session.nodeId].name = valid;
+        }
+        saveSessions();
+        broadcastSnapshot();
+
+        json(res, 200, { profile: result.profile });
+        return;
+      } finally {
+        inFlightUsernames.delete(canonical);
+      }
     }
 
     if (url.pathname === '/api/integration/rooms/authorize' && req.method === 'POST') {
@@ -920,7 +971,7 @@ export async function createGameServer(options: GameServerOptions = {}): Promise
 
       switch (message.type) {
         case 'join':
-          handleJoin(ws, client, message.name, now);
+          void handleJoin(ws, client, message.name, now);
           return;
 
         case 'team_name':
@@ -1057,7 +1108,7 @@ export async function createGameServer(options: GameServerOptions = {}): Promise
     }
   }
 
-  function handleJoin(ws: WebSocket, client: ClientConnection, rawName: unknown, now: number): void {
+  async function handleJoin(ws: WebSocket, client: ClientConnection, rawName: unknown, now: number): Promise<void> {
     if (client.sessionId) {
       send(ws, snapshotFor(client));
       return;
@@ -1067,34 +1118,99 @@ export async function createGameServer(options: GameServerOptions = {}): Promise
       return;
     }
 
-    const name = sanitizeName(typeof rawName === 'string' ? rawName : '');
-    const sessionId = randomBytes(8).toString('hex');
-    const token = randomBytes(18).toString('base64url');
+    const isTaken = (cand: string): boolean => {
+      const c = canonicalUsername(cand);
+      if (inFlightUsernames.has(c)) return true;
+      for (const s of sessions.values()) {
+        if (canonicalUsername(s.name) === c) return true;
+      }
+      for (const n of Object.values(line.state.nodes)) {
+        if (canonicalUsername(n.name) === c) return true;
+      }
+      return false;
+    };
 
-    const action: Action = { type: 'join', sessionId, name };
-    const out = line.apply(action, now);
-    metrics.actions++;
-    metrics.joins++;
+    let name: string;
+    const rawStr = typeof rawName === 'string' ? rawName.normalize('NFKC').trim() : '';
 
-    const joined = out.result;
-    if (!joined || !('kind' in joined) || !joined.ok) {
-      metrics.rejected++;
-      send(ws, { type: 'error', code: 'JOIN_FAILED' });
+    if (!rawStr) {
+      const nextSeq = line.state.nodeSeq + 1;
+      name = generateFallbackUsername(`Player_${nextSeq}`, isTaken);
+    } else {
+      const sanitized = rawStr.replace(/\s+/g, '_');
+      const valid = validateUsername(sanitized);
+      if (!valid) {
+        send(ws, { type: 'error', code: 'INVALID_USERNAME' });
+        return;
+      }
+      name = valid;
+    }
+
+    const canonical = canonicalUsername(name);
+
+    if (isTaken(name)) {
+      send(ws, { type: 'error', code: 'USERNAME_TAKEN' });
       return;
     }
 
-    client.sessionId = sessionId;
-    client.nodeId = joined.nodeId;
-    client.ready = true;
-    client.lastHeartbeatAt = now;
-    sessions.set(token, { sessionId, nodeId: joined.nodeId, name });
-    saveSessions();
+    inFlightUsernames.add(canonical);
 
-    send(ws, { type: 'welcome', v: PROTOCOL_VERSION, token, lineId: line.state.id, spectator: false });
-    send(ws, snapshotFor(client));
+    try {
+      if (supabase) {
+        try {
+          const existing = await supabase.getProfileByUsername(canonical);
+          if (existing) {
+            send(ws, { type: 'error', code: 'USERNAME_TAKEN' });
+            return;
+          }
+        } catch {
+          // best-effort lookup
+        }
+      }
 
-    // Everyone else learns about the new node by delta. A join creates no edge.
-    broadcastEvents(out.events as unknown as WireEvent[]);
+      const sessionId = randomBytes(8).toString('hex');
+      const token = randomBytes(18).toString('base64url');
+
+      const action: Action = { type: 'join', sessionId, name };
+      const out = line.apply(action, now);
+      metrics.actions++;
+      metrics.joins++;
+
+      const joined = out.result;
+      if (!joined || !('kind' in joined) || !joined.ok) {
+        metrics.rejected++;
+        send(ws, { type: 'error', code: 'JOIN_FAILED' });
+        return;
+      }
+
+      if (supabase) {
+        try {
+          const reg = await supabase.registerUsername(joined.nodeId, name);
+          if (!reg.ok && reg.code === 'USERNAME_TAKEN') {
+            metrics.rejected++;
+            send(ws, { type: 'error', code: 'USERNAME_TAKEN' });
+            return;
+          }
+        } catch {
+          // best-effort persistence
+        }
+      }
+
+      client.sessionId = sessionId;
+      client.nodeId = joined.nodeId;
+      client.ready = true;
+      client.lastHeartbeatAt = now;
+      sessions.set(token, { sessionId, nodeId: joined.nodeId, name });
+      saveSessions();
+
+      send(ws, { type: 'welcome', v: PROTOCOL_VERSION, token, lineId: line.state.id, spectator: false });
+      send(ws, snapshotFor(client));
+
+      // Everyone else learns about the new node by delta. A join creates no edge.
+      broadcastEvents(out.events as unknown as WireEvent[]);
+    } finally {
+      inFlightUsernames.delete(canonical);
+    }
   }
 
   /**
