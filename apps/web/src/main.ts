@@ -1284,22 +1284,18 @@ function renderTeamLeaderboard(): void {
     const body = document.createElement('span'); body.className = 'teamRowBody';
     const name = document.createElement('span'); name.className = 'teamRowName'; name.textContent = `${team.name ?? 'Unnamed team'}${team.leaderNodeId === model.me?.nodeId ? '  ♛' : ''}`;
     const isLeader = team.leaderNodeId === model.me?.nodeId;
-    const meta = document.createElement('span'); meta.className = 'teamRowMeta'; meta.textContent = `${team.memberNodeIds.length} members · ${metrics.links} active links · ${team.leaderNodeId ? `leader ${model.nodes.get(team.leaderNodeId)?.name ?? team.leaderNodeId} · ` : ''}${isLeader ? 'RENAME TEAM · ' : ''}${team.qualification === 'entered' ? 'Surprise Zone' : team.qualification === 'qualified' ? 'Qualified' : 'Not qualified'}`;
+    const meta = document.createElement('span'); meta.className = 'teamRowMeta'; meta.textContent = `${team.memberNodeIds.length} members · ${metrics.links} active links · ${team.leaderNodeId ? `leader ${model.nodes.get(team.leaderNodeId)?.name ?? team.leaderNodeId} · ` : ''}RENAME TEAM · ${team.qualification === 'entered' ? 'Surprise Zone' : team.qualification === 'qualified' ? 'Qualified' : 'Not qualified'}`;
     const count = document.createElement('span'); count.className = 'teamRowCount'; count.textContent = `${metrics.restored} repairs`; count.title = 'Repair-phase links that merged disconnected components';
     body.append(name, meta); row.append(rank, body, count);
     row.addEventListener('click', () => {
-      if (isLeader) {
-        promptedTeamId = team.teamId;
-        el.teamNameDialog.querySelector('.eyebrow')!.textContent = 'Mesh leadership';
-        (document.getElementById('teamNameTitle') as HTMLElement).textContent = team.name === null ? 'Create your team' : 'Rename your team';
-        el.teamNameInput.value = team.name ?? '';
-        el.teamDescriptionInput.value = team.description ?? '';
-        el.teamNameSave.textContent = team.name === null ? 'Create team' : 'Update team name';
-        el.teamNameDialog.hidden = false;
-        el.teamNameInput.focus();
-        return;
-      }
-      const first = team.memberNodeIds[0]; if (first) focusPlayerNode(first);
+      promptedTeamId = team.teamId;
+      el.teamNameDialog.querySelector('.eyebrow')!.textContent = 'Mesh team name';
+      (document.getElementById('teamNameTitle') as HTMLElement).textContent = team.name === null ? 'Create your team' : 'Rename your team';
+      el.teamNameInput.value = team.name ?? '';
+      el.teamDescriptionInput.value = team.description ?? '';
+      el.teamNameSave.textContent = team.name === null ? 'Create team' : 'Update team name';
+      el.teamNameDialog.hidden = false;
+      el.teamNameInput.focus();
     });
     row.addEventListener('keydown', (event) => {
       if (event.key === 'Enter' || event.key === ' ') {
@@ -1725,9 +1721,8 @@ el.teamNameInput.addEventListener('keydown', (event) => {
 });
 
 el.teamNameSave.addEventListener('click', () => {
-  const team = model.teams.find((entry) => entry.teamId === promptedTeamId)
-    ?? model.teams.find((entry) => entry.memberNodeIds.includes(model.me?.nodeId ?? ''))
-    ?? model.teams[0];
+  const myTeam = model.teams.find((entry) => entry.memberNodeIds.includes(model.me?.nodeId ?? ''));
+  const team = myTeam ?? model.teams.find((entry) => entry.teamId === promptedTeamId) ?? model.teams[0];
   const name = el.teamNameInput.value.trim();
   if (!team || !name) { toast('Choose a team name', 'bad'); return; }
   if (name.length < 3 || name.length > 24) { toast('Team names must be 3-24 characters', 'bad'); return; }

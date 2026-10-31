@@ -138,7 +138,7 @@ export async function createGameServer(options: GameServerOptions = {}): Promise
   const tickMs = options.tickMs ?? 200;
   const requestTtlMs = options.requestTtlMs ?? config.links.requestTtlMs;
   const configuredOfflineTimeout = Number(process.env.NODE_OFFLINE_TIMEOUT_MS);
-  const offlineTimeoutMs = options.offlineTimeoutMs ?? (Number.isFinite(configuredOfflineTimeout) && configuredOfflineTimeout > 0 ? configuredOfflineTimeout : 10_000);
+  const offlineTimeoutMs = options.offlineTimeoutMs ?? (Number.isFinite(configuredOfflineTimeout) && configuredOfflineTimeout > 0 ? configuredOfflineTimeout : 1_200_000);
   const seed = options.seed ?? (Number(process.env.SEED) || (clock() >>> 0));
   const smokeBaseUrl = process.env.SMOKE_BASE_URL?.replace(/\/+$/, '') ?? 'http://localhost:10001';
   const smokeInternalSecret = process.env.SMOKE_INTERNAL_API_SECRET ?? 'local-only-change-me';
@@ -294,13 +294,15 @@ export async function createGameServer(options: GameServerOptions = {}): Promise
       next.set(teamId, record);
     }
     for (const [id, record] of teamRecords) {
-      if (!next.has(id) && record.memberNodeIds.every((mId) => active.has(mId))) {
+      if (!next.has(id) && record.memberNodeIds.length >= 2 && record.memberNodeIds.every((mId) => active.has(mId))) {
         next.set(id, { ...record, activeLinks: 0 });
       }
     }
     teamRecords.clear();
     for (const [id, record] of next) teamRecords.set(id, record);
-    return [...next.entries()].map(([teamId, record]) => ({ teamId, roomId: teamId, ...record }));
+    return [...next.entries()]
+      .filter(([_, record]) => record.memberNodeIds.length >= 2)
+      .map(([teamId, record]) => ({ teamId, roomId: teamId, ...record }));
   }
 
   function evaluateQualification(now: number): boolean {
@@ -655,7 +657,7 @@ export async function createGameServer(options: GameServerOptions = {}): Promise
 
   const broadcastSnapshot = (): void => {
     if (supabase) void supabase.syncTeams(currentTeams(clock())).catch((error: unknown) => {
-      console.error('Supabase team synchronization failed:', error instanceof Error ? error.message : 'unknown error');
+      console.error('Supabase team synchronization failed:', error);
     });
     for (const client of clients.values()) {
       if (!client.ready) continue;
@@ -950,6 +952,7 @@ export async function createGameServer(options: GameServerOptions = {}): Promise
         client.nodeId = session.nodeId;
         client.ready = true;
         client.lastHeartbeatAt = clock();
+        offlineNodes.delete(session.nodeId);
         send(ws, {
           type: 'welcome',
           v: PROTOCOL_VERSION,
@@ -1066,14 +1069,24 @@ export async function createGameServer(options: GameServerOptions = {}): Promise
       ? rawDescription.replace(/[\u0000-\u001f\u007f]/g, '').trim().slice(0, 160)
       : '';
     const teams = currentTeams(now);
-    let team = teams.find((entry) => entry.teamId === rawTeamId);
-    const record = team ? teamRecords.get(team.teamId) : teamRecords.get(rawTeamId);
-    if (!record || record.leaderNodeId !== client.nodeId) {
+    let team = teams.find((entry) => entry.teamId === rawTeamId)
+      ?? teams.find((entry) => entry.memberNodeIds.includes(client.nodeId!));
+    const targetTeamId = team?.teamId ?? rawTeamId;
+    const record = teamRecords.get(targetTeamId) ?? (team ? teamRecords.get(team.teamId) : undefined);
+    if (!record || !record.memberNodeIds.includes(client.nodeId)) {
+      send(ws, { type: 'error', code: 'TEAM_NOT_FOUND' });
+      return;
+    }
+    // If the team has a designated leader and another member attempts to name/rename it,
+    // require leadership only if the leader is actively connected right now.
+    // However, if the leader is offline, disconnected, or the caller is the leader, permit it.
+    const leaderIsConnected = record.leaderNodeId ? [...clients.values()].some((c) => c.ready && c.nodeId === record.leaderNodeId) : false;
+    if (record.leaderNodeId && record.leaderNodeId !== client.nodeId && leaderIsConnected) {
       send(ws, { type: 'error', code: 'TEAM_NOT_FOUND' });
       return;
     }
     const duplicate = teams.some((entry) =>
-      entry.teamId !== rawTeamId &&
+      entry.teamId !== targetTeamId &&
       entry.name !== null &&
       entry.name.localeCompare(name, undefined, { sensitivity: 'accent' }) === 0,
     );
@@ -1084,7 +1097,7 @@ export async function createGameServer(options: GameServerOptions = {}): Promise
     if (supabase) {
       try {
         const existing = await supabase.getTeamByName(name);
-        if (existing && existing.team_id !== rawTeamId) {
+        if (existing && existing.team_id !== targetTeamId) {
           send(ws, { type: 'error', code: 'TEAM_NAME_TAKEN' });
           return;
         }
@@ -1094,11 +1107,14 @@ export async function createGameServer(options: GameServerOptions = {}): Promise
     }
     record.name = name;
     record.nameOwnerNodeId = client.nodeId;
+    if (!record.leaderNodeId || record.leaderNodeId !== client.nodeId) {
+      record.leaderNodeId = client.nodeId;
+    }
     record.description = description || null;
     saveTeamState();
-    syncSmoke(`/api/v1/internal/rooms/${encodeURIComponent(team?.roomId ?? rawTeamId)}/team`, {
-      teamId: rawTeamId, teamName: record.name,
-    }, `team:${rawTeamId}:${record.name}:${now}`);
+    syncSmoke(`/api/v1/internal/rooms/${encodeURIComponent(team?.roomId ?? targetTeamId)}/team`, {
+      teamId: targetTeamId, teamName: record.name,
+    }, `team:${targetTeamId}:${record.name}:${now}`);
     broadcastSnapshot();
   }
 
@@ -1442,6 +1458,7 @@ export async function createGameServer(options: GameServerOptions = {}): Promise
         teamRecord.memberJoinedAt[request.fromNodeId] = now;
       }
       sendRequestResult(request, 'accepted', { linkId: result.linkId });
+      broadcastSnapshot();
       broadcastEvents(out.events as unknown as WireEvent[]);
       return;
     }
