@@ -527,7 +527,16 @@ function handleError(code: string): void {
     el.name.focus();
     return;
   }
-  toast('Could not confirm, try again', 'bad');
+  if (code === 'JOIN_FAILED') {
+    showJoin();
+    toast('Could not join the game, please try again.', 'bad');
+    return;
+  }
+  if (code === 'SMOKE_INVITE_NOT_AUTHORIZED') {
+    toast('Only members of this mesh can send room invites.', 'bad');
+    return;
+  }
+  toast(`Action rejected: ${code}`, 'bad');
 }
 
 function onJoined(): void {
@@ -1306,7 +1315,7 @@ function renderTeamLeaderboard(): void {
     el.teamList.append(row);
   });
   renderSmokeRoom(myTeam);
-  if (myTeam && myTeam.name === null && myTeam.leaderNodeId === model.me?.nodeId && promptedTeamId !== myTeam.teamId && model.phase !== 'warning' && model.phase !== 'result' && model.incoming.size === 0) {
+  if (el.teamNameDialog.hidden && myTeam && myTeam.name === null && myTeam.leaderNodeId === model.me?.nodeId && promptedTeamId !== myTeam.teamId && model.phase !== 'warning' && model.phase !== 'result' && model.incoming.size === 0) {
     promptedTeamId = myTeam.teamId;
     el.teamNameDialog.hidden = false;
     el.teamNameInput.value = '';
@@ -1387,6 +1396,10 @@ function renderTeamLeaderboard(): void {
       return;
     }
     el.openSmokeRoom.disabled = true;
+    const popup = window.open('about:blank', '_blank');
+    if (popup) {
+      try { popup.opener = null; } catch {}
+    }
     fetch('/api/integration/rooms/authorize', {
       method: 'POST',
       headers: { 'content-type': 'application/json', authorization: `Bearer ${sessionToken}` },
@@ -1395,9 +1408,16 @@ function renderTeamLeaderboard(): void {
       const result = await response.json() as { accessToken?: string; error?: string };
       if (!response.ok || !result.accessToken) throw new Error(result.error ?? 'Smoke Room authorization failed');
       const smokeBase = import.meta.env.VITE_SMOKE_BASE_URL ?? 'http://localhost:10001';
-      window.open(`${smokeBase}/?roomId=${encodeURIComponent(team.roomId)}&token=${encodeURIComponent(result.accessToken)}`, '_blank', 'noopener');
-    }).catch((error: unknown) => toast(error instanceof Error ? error.message : 'Smoke Room authorization failed', 'bad'))
-      .finally(() => renderSmokeRoom(team));
+      const targetUrl = `${smokeBase}/?roomId=${encodeURIComponent(team.roomId)}&token=${encodeURIComponent(result.accessToken)}`;
+      if (popup) {
+        popup.location.href = targetUrl;
+      } else {
+        window.open(targetUrl, '_blank', 'noopener');
+      }
+    }).catch((error: unknown) => {
+      if (popup) popup.close();
+      toast(error instanceof Error ? error.message : 'Smoke Room authorization failed', 'bad');
+    }).finally(() => renderSmokeRoom(team));
   }
 }
 
@@ -1721,8 +1741,9 @@ el.teamNameInput.addEventListener('keydown', (event) => {
 });
 
 el.teamNameSave.addEventListener('click', () => {
-  const myTeam = model.teams.find((entry) => entry.memberNodeIds.includes(model.me?.nodeId ?? ''));
-  const team = myTeam ?? model.teams.find((entry) => entry.teamId === promptedTeamId) ?? model.teams[0];
+  const team = (promptedTeamId ? model.teams.find((entry) => entry.teamId === promptedTeamId) : undefined)
+    ?? model.teams.find((entry) => entry.memberNodeIds.includes(model.me?.nodeId ?? ''))
+    ?? model.teams[0];
   const name = el.teamNameInput.value.trim();
   if (!team || !name) { toast('Choose a team name', 'bad'); return; }
   if (name.length < 3 || name.length > 24) { toast('Team names must be 3-24 characters', 'bad'); return; }
@@ -1966,13 +1987,26 @@ function updateKeyboardMovement(dtMs: number): void {
   sendPosition(false);
 }
 
+let panDrag: { pointerId: number; startSX: number; startSY: number; startOx: number; startOy: number; moved: boolean } | null = null;
+
 canvas.addEventListener('pointerdown', (event) => {
   if (spectator) return;
   const rect = canvas.getBoundingClientRect();
   const sx = event.clientX - rect.left;
   const sy = event.clientY - rect.top;
   const node = pickNode(model.nodes.values(), camera, sx, sy, 26, model.visual);
-  if (!node) return;
+  if (!node) {
+    panDrag = {
+      pointerId: event.pointerId,
+      startSX: sx,
+      startSY: sy,
+      startOx: camera.ox,
+      startOy: camera.oy,
+      moved: false,
+    };
+    canvas.setPointerCapture?.(event.pointerId);
+    return;
+  }
 
   if (!model.me?.nodeId) return showJoin();
 
@@ -2001,6 +2035,15 @@ canvas.addEventListener('pointermove', (event) => {
   const rect = canvas.getBoundingClientRect();
   const sx = event.clientX - rect.left;
   const sy = event.clientY - rect.top;
+  if (panDrag && event.pointerId === panDrag.pointerId) {
+    const dx = sx - panDrag.startSX;
+    const dy = sy - panDrag.startSY;
+    if (Math.hypot(dx, dy) >= 4) panDrag.moved = true;
+    camera.ox = panDrag.startOx + dx;
+    camera.oy = panDrag.startOy + dy;
+    event.preventDefault();
+    return;
+  }
   if (!drag) {
     const node = pickNode(model.nodes.values(), camera, sx, sy, 26, model.visual);
     if (node) showPlayerCard(node.id);
@@ -2019,6 +2062,12 @@ canvas.addEventListener('pointermove', (event) => {
 });
 
 function endDrag(event: PointerEvent, cancelled = false): void {
+  if (panDrag && event.pointerId === panDrag.pointerId) {
+    panDrag = null;
+    if (canvas.hasPointerCapture?.(event.pointerId)) {
+      canvas.releasePointerCapture(event.pointerId);
+    }
+  }
   if (!drag || event.pointerId !== drag.pointerId) return;
   const wasDrag = drag.moved;
   drag = null;
@@ -2054,6 +2103,12 @@ function keyName(event: KeyboardEvent): string {
 }
 
 window.addEventListener('keydown', (event) => {
+  if (event.key === 'Escape') {
+    if (!el.teamNameDialog.hidden) { el.teamNameDialog.hidden = true; return; }
+    if (!el.learnPanel.hidden) { el.learnPanel.hidden = true; return; }
+    if (searchOpen) { closeSearch(); return; }
+    if (selectedTargetId) { cancelSelection(); return; }
+  }
   if (event.ctrlKey || event.metaKey || event.altKey) return;
   const target = event.target as HTMLElement | null;
   if (target && ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName)) return;

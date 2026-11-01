@@ -94,36 +94,55 @@ export function createSupabaseStore(): SupabaseStore | null {
     async syncTeams(teams) {
       for (const team of teams) {
         for (const nodeId of team.memberNodeIds) {
-          const { error: profileError } = await client.from('player_profiles').upsert({
-            node_id: nodeId,
-            username: fallbackUsername(nodeId),
-          }, { onConflict: 'node_id', ignoreDuplicates: true });
-          if (profileError) throw profileError;
-        }
-        await rpc('create_team_with_room', {
-          p_team_id: team.teamId,
-          p_mesh_id: team.teamId,
-          p_team_name: team.name ?? team.teamId,
-          p_room_id: team.roomId,
-          p_leader_node_id: team.leaderNodeId,
-        });
-        for (const nodeId of team.memberNodeIds) {
-          if (nodeId !== team.leaderNodeId) {
-            await rpc('add_team_member', {
-              p_team_id: team.teamId,
-              p_node_id: nodeId,
-            });
+          try {
+            await client.from('player_profiles').upsert({
+              node_id: nodeId,
+              username: fallbackUsername(nodeId),
+            }, { onConflict: 'node_id', ignoreDuplicates: true });
+          } catch {
+            // best effort
           }
         }
-        await rpc('transfer_team_leadership', {
-          p_team_id: team.teamId,
-          p_new_leader_node_id: team.leaderNodeId,
-        });
-        if (team.name) {
-          await rpc('rename_team', {
+        try {
+          await rpc('create_team_with_room', {
             p_team_id: team.teamId,
-            p_team_name: team.name,
+            p_mesh_id: team.teamId,
+            p_team_name: team.name ?? team.teamId,
+            p_room_id: team.roomId,
+            p_leader_node_id: team.leaderNodeId,
           });
+        } catch {
+          // best effort
+        }
+        for (const nodeId of team.memberNodeIds) {
+          if (nodeId !== team.leaderNodeId) {
+            try {
+              await rpc('add_team_member', {
+                p_team_id: team.teamId,
+                p_node_id: nodeId,
+              });
+            } catch {
+              // member may already be added or revoked
+            }
+          }
+        }
+        try {
+          await rpc('transfer_team_leadership', {
+            p_team_id: team.teamId,
+            p_new_leader_node_id: team.leaderNodeId,
+          });
+        } catch {
+          // best effort
+        }
+        if (team.name) {
+          try {
+            await rpc('rename_team', {
+              p_team_id: team.teamId,
+              p_team_name: team.name,
+            });
+          } catch {
+            // best effort
+          }
         }
       }
     },

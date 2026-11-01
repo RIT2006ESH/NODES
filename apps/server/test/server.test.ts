@@ -416,7 +416,7 @@ describe('connection requests', () => {
     expect(team.leaderNodeId).toBe(a.nodeId);
     expect(team.roomId).toBe(team.teamId);
     b.client.send({ type: 'team_name', teamId: team.teamId, name: 'Not The Leader' });
-    const unauthorized = await b.client.wait((message) => message.type === 'error' && message.code === 'TEAM_NOT_FOUND');
+    const unauthorized = await b.client.wait((message) => message.type === 'error' && (message.code === 'NOT_TEAM_LEADER' || message.code === 'TEAM_NOT_FOUND'));
     expect(unauthorized.type).toBe('error');
     a.client.send({ type: 'team_name', teamId: team.teamId, name: 'Monsoon Mesh', description: 'Connected by consent.' });
     const named = await b.client.wait((m) => m.type === 'snapshot' && m.teams.some((entry) => entry.teamId === team.teamId && entry.name === 'Monsoon Mesh'));

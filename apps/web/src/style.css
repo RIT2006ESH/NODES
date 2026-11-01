@@ -13,7 +13,7 @@ body[data-phase="result"] #hud { box-shadow:inset 0 -1px 0 rgba(130,232,204,.2),
 body.outageFlash::after { box-shadow:inset 0 0 120px rgba(255,102,125,.34); animation:outageVignette .7s ease-out; }
 @keyframes outageVignette { from { opacity:1; } to { opacity:.45; } }
 #board { position:fixed; inset:0; width:100%; height:100%; display:block; touch-action:none; }
-#hud { position:fixed; z-index:10; inset:0 0 auto; height:76px; display:flex; align-items:center; gap:20px; padding:12px 24px; background:linear-gradient(180deg,rgba(7,10,18,.96),rgba(7,10,18,.7) 65%,transparent); pointer-events:none; }
+#hud { position:fixed; z-index:10; inset:0 0 auto; min-height:76px; display:flex; align-items:center; gap:20px; padding:max(12px, env(safe-area-inset-top, 0px)) max(24px, env(safe-area-inset-right, 0px)) 12px max(24px, env(safe-area-inset-left, 0px)); background:linear-gradient(180deg,rgba(7,10,18,.96),rgba(7,10,18,.7) 65%,transparent); pointer-events:none; }
 .brand { display:flex; align-items:center; gap:11px; min-width:255px; }
 .brandGlyph { width:31px; height:31px; border:1px solid rgba(105,213,255,.7); border-radius:9px; transform:rotate(45deg); display:grid; place-items:center; box-shadow:0 0 22px rgba(70,141,255,.24); }
 .brandGlyph span { width:10px; height:10px; border-radius:50%; background:var(--cyan); box-shadow:0 0 14px var(--cyan); }
@@ -59,7 +59,7 @@ body[data-phase="warning"] .phaseMetric b { color:var(--amber); } body[data-phas
 #requestBar { position:fixed; left:50%; bottom:68px; transform:translateX(-50%); z-index:16; width:min(360px,calc(100vw - 28px)); padding:14px; background:rgba(16,24,39,.97); border:1px solid rgba(255,198,109,.4); border-radius:14px; box-shadow:0 20px 60px rgba(0,0,0,.55); } .requestHeading { display:flex; flex-direction:column; gap:4px; } .requestEyebrow,.requestCardEyebrow { color:var(--amber); font-size:9px; letter-spacing:1px; text-transform:uppercase; } #requestText { font-size:14px; } .requestNote,.requestStatus { margin:6px 0; color:var(--muted); font-size:11px; } .requestStatus { color:var(--cyan); } .requestButtons,.requestActions { display:flex; gap:8px; } #requestBar button,.requestActions button { flex:1; padding:9px 11px; border:1px solid var(--border); border-radius:8px; background:rgba(7,10,18,.7); color:var(--text); font:inherit; font-size:11px; cursor:pointer; } #requestBar #requestSend,.requestActions .accept { background:linear-gradient(135deg,var(--mint),var(--cyan)); color:#07111a; font-weight:700; }
 #requests { position:fixed; top:94px; left:50%; transform:translateX(-50%); z-index:22; width:min(360px,calc(100vw - 28px)); display:flex; flex-direction:column; gap:8px; } #requests:empty { display:none; } .requestCard { padding:13px 14px; background:rgba(16,24,39,.97); border:1px solid rgba(130,232,204,.38); border-radius:13px; box-shadow:0 18px 50px rgba(0,0,0,.5); } .requestCard p { margin:5px 0; font-size:12px; } .requestId { color:var(--muted); font:9px ui-monospace,monospace; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; margin:6px 0 10px; } .requestActions .decline { border-color:rgba(255,102,125,.35); }
 #outgoing { position:fixed; left:24px; bottom:60px; z-index:15; display:flex; flex-direction:column; gap:6px; } #outgoing:empty { display:none; } .outgoingItem { padding:8px 11px; border:1px dashed rgba(255,198,109,.5); border-radius:9px; background:rgba(16,24,39,.9); } .outgoingLabel { color:var(--amber); font-size:9px; } .outgoingName { font-size:11px; }
-#banner { position:fixed; z-index:20; top:0; left:0; right:0; padding:8px; text-align:center; font-size:11px; background:rgba(255,102,125,.16); color:#ffd9df; border-bottom:1px solid rgba(255,102,125,.35); } #banner.info { background:rgba(255,198,109,.14); color:#ffe9b8; border-bottom-color:rgba(255,198,109,.3); }
+#banner { position:fixed; z-index:20; top:env(safe-area-inset-top, 0px); left:0; right:0; padding:8px; text-align:center; font-size:11px; background:rgba(255,102,125,.16); color:#ffd9df; border-bottom:1px solid rgba(255,102,125,.35); } #banner.info { background:rgba(255,198,109,.14); color:#ffe9b8; border-bottom-color:rgba(255,198,109,.3); }
 #toasts { position:fixed; z-index:50; left:50%; bottom:72px; transform:translateX(-50%); display:flex; flex-direction:column; gap:7px; align-items:center; pointer-events:none; } .toast { padding:9px 13px; border:1px solid var(--border); border-radius:9px; background:rgba(16,24,39,.96); box-shadow:0 12px 35px rgba(0,0,0,.45); font-size:11px; animation:rise .2s ease; } .toast.good { border-color:rgba(130,232,204,.45); } .toast.bad { border-color:rgba(255,102,125,.45); } @keyframes rise { from { opacity:0; transform:translateY(6px); } to { opacity:1; transform:none; } }
 .smokeInvitePopup { position:fixed; z-index:32; right:24px; bottom:116px; width:min(340px,calc(100vw - 32px)); padding:14px; border:1px solid rgba(130,232,204,.42); border-radius:13px; background:rgba(16,24,39,.97); box-shadow:0 18px 55px rgba(0,0,0,.55); }
 .smokeInvitePopup[hidden] { display:none; }
@@ -85,7 +85,10 @@ body.screen #hud,body.screen #join,body.screen .gameControls,body.screen #hint,b
 /* Interaction audit: keep modal controls above transient overlays and give them
    reliable touch targets without changing their game-state rules. */
 #requestBar { z-index:40; pointer-events:auto; }
-#requestBar button, #requestBar .requestButtons button { min-height:44px; pointer-events:auto; touch-action:manipulation; }
+#requestBar button, #requestBar .requestButtons button, .smokeRoomActions button,
+.smokeInviteActions button, .libp2pPopupActions button, .panelClose, .cardDismiss,
+.teamNameActions button, .teamRow { min-height:44px; pointer-events:auto; touch-action:manipulation; }
+.weakChip { min-height:44px; min-width:44px; display:inline-flex; align-items:center; justify-content:center; }
 #requests { z-index:41; pointer-events:auto; }
 #requests button, #leaderboard button, #searchResults button, .playerCard button,
 .learnPanel button, .pulseResult button, .failurePreview button { pointer-events:auto; touch-action:manipulation; }
@@ -177,13 +180,22 @@ body.screen #hud,body.screen #join,body.screen .gameControls,body.screen #hint,b
    compact drawer above the action stack. */
 @media (max-width:720px) {
   #searchPanel { top:76px; left:12px; width:calc(100vw - 24px); }
+  #playerSearch, .card input, .teamNameCard input, .teamNameCard textarea { font-size:16px !important; }
+  .card, .teamNameCard { max-height:88vh; overflow-y:auto; -webkit-overflow-scrolling:touch; }
   #searchResults { width:100%; max-height:34vh; }
   #leaderboard { top:auto; right:12px; bottom:calc(170px + env(safe-area-inset-bottom, 0px)); width:calc(100vw - 24px); max-height:42vh; }
   #leaderboard:not(.collapsed) { top:auto; width:calc(100vw - 24px); }
   #lbBody { max-height:calc(42vh - 48px); overflow:auto; }
   #requestBar { bottom:calc(166px + env(safe-area-inset-bottom, 0px)); }
-  .playerCard { left:12px !important; right:12px; bottom:calc(166px + env(safe-area-inset-bottom, 0px)); top:auto !important; width:auto; max-height:38vh; overflow:auto; }
+  .playerCard { left:12px !important; right:12px; bottom:calc(226px + env(safe-area-inset-bottom, 0px)); top:auto !important; width:auto; max-height:36vh; overflow:auto; }
   .learnPanel { z-index:45; }
+}
+
+@media (min-width:721px) and (max-width:1024px) {
+  #hud { padding:12px 16px; gap:12px; }
+  #leaderboard { right:16px; width:280px; }
+  #searchPanel { width:220px; }
+  .activityFeed { width:170px; }
 }
 
 /* ------------------------------------------------------------------------

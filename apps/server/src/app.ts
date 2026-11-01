@@ -289,12 +289,41 @@ export async function createGameServer(options: GameServerOptions = {}): Promise
       const prior = inherited;
       const leaderNodeId = prior?.leaderNodeId && members.includes(prior.leaderNodeId) ? prior.leaderNodeId : prior?.nameOwnerNodeId && members.includes(prior.nameOwnerNodeId) ? prior.nameOwnerNodeId : members[0]!;
       const memberJoinedAt = Object.fromEntries(members.map((id) => [id, prior?.memberJoinedAt[id] ?? line.state.nodes[id]!.createdAt]));
-      const record: TeamRecord = { name: prior?.name ?? null, description: prior?.description ?? null, leaderNodeId, nameOwnerNodeId: prior?.nameOwnerNodeId ?? null, memberNodeIds: members, memberJoinedAt, createdAt: prior?.createdAt ?? now, area, qualification: prior?.qualification ?? 'ineligible', recoveries: prior?.recoveries ?? 0, activeLinks };
+      const record: TeamRecord = prior
+        ? {
+            ...prior,
+            memberNodeIds: members,
+            memberJoinedAt,
+            leaderNodeId,
+            area,
+            activeLinks,
+          }
+        : {
+            name: null,
+            description: null,
+            leaderNodeId,
+            nameOwnerNodeId: null,
+            memberNodeIds: members,
+            memberJoinedAt,
+            createdAt: now,
+            area,
+            qualification: 'ineligible',
+            recoveries: 0,
+            activeLinks,
+          };
       if (candidates[0]) used.add(candidates[0][0]);
       next.set(teamId, record);
     }
     for (const [id, record] of teamRecords) {
-      if (!next.has(id) && record.memberNodeIds.length >= 2 && record.memberNodeIds.every((mId) => active.has(mId))) {
+      if (next.has(id)) continue;
+      // Preserve teams where all members are active (0 active links case).
+      if (record.memberNodeIds.length >= 2 && record.memberNodeIds.every((mId) => active.has(mId))) {
+        next.set(id, { ...record, activeLinks: 0 });
+        continue;
+      }
+      // Also preserve named teams with at least one active member,
+      // so the team name is never silently lost when a member goes offline.
+      if (record.name !== null && record.memberNodeIds.some((mId) => active.has(mId))) {
         next.set(id, { ...record, activeLinks: 0 });
       }
     }
@@ -790,7 +819,7 @@ export async function createGameServer(options: GameServerOptions = {}): Promise
       return;
     }
 
-    if (url.pathname === '/healthz') {
+    if (url.pathname === '/healthz' || url.pathname === '/api/health') {
       json(res, 200, {
         ok: true,
         seq: line.seq,
@@ -1082,10 +1111,14 @@ export async function createGameServer(options: GameServerOptions = {}): Promise
     // However, if the leader is offline, disconnected, or the caller is the leader, permit it.
     const leaderIsConnected = record.leaderNodeId ? [...clients.values()].some((c) => c.ready && c.nodeId === record.leaderNodeId) : false;
     if (record.leaderNodeId && record.leaderNodeId !== client.nodeId && leaderIsConnected) {
-      send(ws, { type: 'error', code: 'TEAM_NOT_FOUND' });
+      send(ws, { type: 'error', code: 'NOT_TEAM_LEADER' });
       return;
     }
-    const duplicate = teams.some((entry) =>
+    const duplicate = [...teamRecords.values()].some((entry) =>
+      entry !== record &&
+      entry.name !== null &&
+      entry.name.localeCompare(name, undefined, { sensitivity: 'accent' }) === 0,
+    ) || teams.some((entry) =>
       entry.teamId !== targetTeamId &&
       entry.name !== null &&
       entry.name.localeCompare(name, undefined, { sensitivity: 'accent' }) === 0,
@@ -1105,16 +1138,21 @@ export async function createGameServer(options: GameServerOptions = {}): Promise
         // best-effort Supabase verification: do not block local renaming if Supabase is temporarily unreachable
       }
     }
-    record.name = name;
-    record.nameOwnerNodeId = client.nodeId;
-    if (!record.leaderNodeId || record.leaderNodeId !== client.nodeId) {
-      record.leaderNodeId = client.nodeId;
+    const liveRecord = teamRecords.get(targetTeamId) ?? (team ? teamRecords.get(team.teamId) : undefined) ?? record;
+    liveRecord.name = name;
+    liveRecord.nameOwnerNodeId = client.nodeId;
+    if (!liveRecord.leaderNodeId || liveRecord.leaderNodeId !== client.nodeId) {
+      liveRecord.leaderNodeId = client.nodeId;
     }
-    record.description = description || null;
+    liveRecord.description = description || null;
+    teamRecords.set(targetTeamId, liveRecord);
+    if (team?.teamId && team.teamId !== targetTeamId) {
+      teamRecords.set(team.teamId, liveRecord);
+    }
     saveTeamState();
     syncSmoke(`/api/v1/internal/rooms/${encodeURIComponent(team?.roomId ?? targetTeamId)}/team`, {
-      teamId: targetTeamId, teamName: record.name,
-    }, `team:${targetTeamId}:${record.name}:${now}`);
+      teamId: targetTeamId, teamName: liveRecord.name,
+    }, `team:${targetTeamId}:${liveRecord.name}:${now}`);
     broadcastSnapshot();
   }
 
@@ -1221,6 +1259,8 @@ export async function createGameServer(options: GameServerOptions = {}): Promise
         try {
           const reg = await supabase.registerUsername(joined.nodeId, name);
           if (!reg.ok && reg.code === 'USERNAME_TAKEN') {
+            delete line.state.nodes[joined.nodeId];
+            line.state.nodeOrder = line.state.nodeOrder.filter((id) => id !== joined.nodeId);
             metrics.rejected++;
             send(ws, { type: 'error', code: 'USERNAME_TAKEN' });
             return;
@@ -1442,6 +1482,12 @@ export async function createGameServer(options: GameServerOptions = {}): Promise
     if (result && 'requestId' in result && result.ok) {
       offlineNodes.delete(request.fromNodeId);
       resolveRequest(request, 'accepted', { linkId: result.linkId });
+      for (const otherReq of requests.values()) {
+        if (otherReq.status === 'pending' && otherReq.fromNodeId === request.toNodeId && otherReq.toNodeId === request.fromNodeId) {
+          resolveRequest(otherReq, 'declined', { reason: 'ALREADY_LINKED' });
+          sendRequestResult(otherReq, 'declined', { reason: 'ALREADY_LINKED' });
+        }
+      }
       metrics.accepted++;
       metrics.requestAccepted++;
       const team = currentTeams(now).find((entry) =>
@@ -1587,7 +1633,13 @@ export async function createGameServer(options: GameServerOptions = {}): Promise
   }
 
   const port = options.port ?? Number(process.env.PORT ?? 10000);
-  await new Promise<void>((resolveListen) => http.listen(port, '0.0.0.0', resolveListen));
+  await new Promise<void>((resolveListen, rejectListen) => {
+    http.once('error', rejectListen);
+    http.listen(port, '0.0.0.0', () => {
+      http.removeListener('error', rejectListen);
+      resolveListen();
+    });
+  });
   const address = http.address();
   const actualPort = typeof address === 'object' && address ? address.port : port;
 
