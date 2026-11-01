@@ -625,6 +625,11 @@ function applyDelta(message: DeltaMessage): void {
   model.lastScore = message.lastScore;
   model.stats = message.stats;
   model.packetMission = message.packetMission ?? model.packetMission;
+  const prevTeamsKey = model.teams.map((t) => `${t.teamId}:${t.name ?? ''}:${t.leaderNodeId ?? ''}`).join('|');
+  const nextTeamsKey = message.teams.map((t) => `${t.teamId}:${t.name ?? ''}:${t.leaderNodeId ?? ''}`).join('|');
+  if (prevTeamsKey !== nextTeamsKey || model.teams.length !== message.teams.length) {
+    panelsDirty = true;
+  }
   model.teams = [...message.teams];
   youAt = Date.now();
   if (phaseBefore !== null && phaseBefore !== message.phase) onPhaseChange(message.phase);
@@ -1293,18 +1298,40 @@ function renderTeamLeaderboard(): void {
     const body = document.createElement('span'); body.className = 'teamRowBody';
     const name = document.createElement('span'); name.className = 'teamRowName'; name.textContent = `${team.name ?? 'Unnamed team'}${team.leaderNodeId === model.me?.nodeId ? '  ♛' : ''}`;
     const isLeader = team.leaderNodeId === model.me?.nodeId;
-    const meta = document.createElement('span'); meta.className = 'teamRowMeta'; meta.textContent = `${team.memberNodeIds.length} members · ${metrics.links} active links · ${team.leaderNodeId ? `leader ${model.nodes.get(team.leaderNodeId)?.name ?? team.leaderNodeId} · ` : ''}RENAME TEAM · ${team.qualification === 'entered' ? 'Surprise Zone' : team.qualification === 'qualified' ? 'Qualified' : 'Not qualified'}`;
+    const leaderName = team.leaderNodeId ? (model.nodes.get(team.leaderNodeId)?.name ?? team.leaderNodeId) : null;
+    const qual = team.qualification === 'entered' ? 'Surprise Zone' : team.qualification === 'qualified' ? 'Qualified' : 'Not qualified';
+    const meta = document.createElement('span'); meta.className = 'teamRowMeta';
+    meta.textContent = `${team.memberNodeIds.length} members · ${metrics.links} active links${leaderName ? ` · leader ${leaderName}` : ''} · ${qual}`;
     const count = document.createElement('span'); count.className = 'teamRowCount'; count.textContent = `${metrics.restored} repairs`; count.title = 'Repair-phase links that merged disconnected components';
-    body.append(name, meta); row.append(rank, body, count);
-    row.addEventListener('click', () => {
-      promptedTeamId = team.teamId;
+    body.append(name, meta);
+    const openTeamDialog = (targetTeam: TeamView) => {
+      promptedTeamId = targetTeam.teamId;
       el.teamNameDialog.querySelector('.eyebrow')!.textContent = 'Mesh team name';
-      (document.getElementById('teamNameTitle') as HTMLElement).textContent = team.name === null ? 'Create your team' : 'Rename your team';
-      el.teamNameInput.value = team.name ?? '';
-      el.teamDescriptionInput.value = team.description ?? '';
-      el.teamNameSave.textContent = team.name === null ? 'Create team' : 'Update team name';
+      (document.getElementById('teamNameTitle') as HTMLElement).textContent = targetTeam.name === null ? 'Create your team' : 'Rename your team';
+      el.teamNameInput.value = targetTeam.name ?? '';
+      el.teamDescriptionInput.value = targetTeam.description ?? '';
+      el.teamNameSave.textContent = targetTeam.name === null ? 'Create team' : 'Update team name';
       el.teamNameDialog.hidden = false;
       el.teamNameInput.focus();
+    };
+    if (isLeader) {
+      const renameBtn = document.createElement('button');
+      renameBtn.type = 'button';
+      renameBtn.className = 'teamRenameBtn';
+      renameBtn.textContent = team.name ? 'Rename team' : 'Name team';
+      renameBtn.addEventListener('click', (event) => {
+        event.stopPropagation();
+        openTeamDialog(team);
+      });
+      body.append(renameBtn);
+    }
+    row.append(rank, body, count);
+    row.addEventListener('click', () => {
+      if (!isLeader) {
+        toast(`Only the mesh leader (${leaderName ?? 'elected leader'}) can name or rename this team`, 'info');
+        return;
+      }
+      openTeamDialog(team);
     });
     row.addEventListener('keydown', (event) => {
       if (event.key === 'Enter' || event.key === ' ') {
@@ -1745,11 +1772,17 @@ el.teamNameSave.addEventListener('click', () => {
     ?? model.teams.find((entry) => entry.memberNodeIds.includes(model.me?.nodeId ?? ''))
     ?? model.teams[0];
   const name = el.teamNameInput.value.trim();
-  if (!team || !name) { toast('Choose a team name', 'bad'); return; }
+  if (!team) { toast('No active team to name', 'bad'); return; }
+  if (!name) { toast('Choose a team name', 'bad'); return; }
   if (name.length < 3 || name.length > 24) { toast('Team names must be 3-24 characters', 'bad'); return; }
   const description = el.teamDescriptionInput.value.trim();
   if (description.length > 160) { toast('Team descriptions must be 160 characters or fewer', 'bad'); return; }
+  if (team.leaderNodeId && model.me?.nodeId && team.leaderNodeId !== model.me.nodeId) {
+    toast('Only the mesh leader can name or rename the team', 'bad');
+    return;
+  }
   if (!send({ type: 'team_name', teamId: team.teamId, name, description })) { toast('Reconnecting — try again when the network resumes', 'bad'); return; }
+  toast(`Submitting team name "${name}"...`, 'info');
   el.teamNameDialog.hidden = true;
 });
 el.teamNameLater.addEventListener('click', () => { el.teamNameDialog.hidden = true; });

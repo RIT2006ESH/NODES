@@ -154,6 +154,8 @@ body.screen #hud,body.screen #join,body.screen .gameControls,body.screen #hint,b
 .teamRowCount { color:var(--mint); font-size:9px; }
 .teamSmokeButton { align-self:flex-start; margin-top:3px; padding:3px 6px; border:1px solid rgba(130,232,204,.35); border-radius:5px; background:rgba(130,232,204,.12); color:var(--mint); font-size:7px; font-weight:700; letter-spacing:.04em; cursor:pointer; }
 .teamSmokeButton:disabled { opacity:.5; cursor:wait; }
+.teamRenameBtn { align-self:flex-start; margin-top:4px; padding:4px 8px; border:1px solid rgba(130,232,204,.4); border-radius:6px; background:rgba(130,232,204,.12); color:var(--mint); font:inherit; font-size:8px; font-weight:700; letter-spacing:.04em; cursor:pointer; text-transform:uppercase; touch-action:manipulation; transition:all .15s ease; }
+.teamRenameBtn:hover { background:rgba(130,232,204,.25); border-color:var(--mint); box-shadow:0 0 10px rgba(130,232,204,.2); }
 .teamEmpty { color:var(--muted); font-size:9px; line-height:1.35; }
 .smokeRoomPanel { margin:0 0 12px; padding:10px; border:1px solid rgba(130,232,204,.2); border-radius:9px; background:rgba(130,232,204,.04); }
 .smokeRoomHead { display:flex; justify-content:space-between; gap:8px; align-items:baseline; }
