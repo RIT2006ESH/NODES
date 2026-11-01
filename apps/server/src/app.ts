@@ -196,6 +196,11 @@ export async function createGameServer(options: GameServerOptions = {}): Promise
     }).catch(() => undefined);
   };
 
+  const normalizePem = (value: string): string => {
+    const pem = value.trim().replace(/^["']|["']$/g, '').replace(/\\n/g, '\n');
+    return pem.endsWith('\n') ? pem : `${pem}\n`;
+  };
+
   const issueSmokeToken = (nodeId: string, team: TeamView): string | null => {
     if (!nodesJwtPrivateKey) return null;
     const now = Math.floor(clock() / 1000);
@@ -207,7 +212,7 @@ export async function createGameServer(options: GameServerOptions = {}): Promise
       iat: now, exp: now + 300, jti: randomBytes(16).toString('hex'),
     })).toString('base64url');
     const unsigned = `${header}.${payload}`;
-    const signature = signEd25519(null, Buffer.from(unsigned), createPrivateKey(nodesJwtPrivateKey)).toString('base64url');
+    const signature = signEd25519(null, Buffer.from(unsigned), createPrivateKey(normalizePem(nodesJwtPrivateKey))).toString('base64url');
     return `${unsigned}.${signature}`;
   };
 
@@ -799,7 +804,8 @@ export async function createGameServer(options: GameServerOptions = {}): Promise
       let accessToken: string | null;
       try {
         accessToken = issueSmokeToken(session.nodeId, team);
-      } catch {
+      } catch (err) {
+        console.error('issueSmokeToken failed:', err);
         json(res, 503, { error: 'Smoke token issuer configuration is invalid' });
         return;
       }

@@ -10,3 +10,5 @@ reports/
 tools/bin/
 
 supabase/.temp/
+*.pem
+*.pem
