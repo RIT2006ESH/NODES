@@ -806,6 +806,15 @@ export async function createGameServer(options: GameServerOptions = {}): Promise
         accessToken = issueSmokeToken(session.nodeId, team);
       } catch (err) {
         console.error('issueSmokeToken failed:', err);
+        const keyFile = process.env.NODES_JWT_PRIVATE_KEY_FILE;
+        let fileDiag: Record<string, unknown> = { path: keyFile, exists: false };
+        try {
+          if (keyFile && existsSync(keyFile)) {
+            const text = readFileSync(keyFile, 'utf8');
+            fileDiag = { path: keyFile, exists: true, length: text.length, hasBegin: text.includes('BEGIN PRIVATE KEY'), hasEnd: text.includes('END PRIVATE KEY'), hasCR: text.includes('\r') };
+          }
+        } catch (e) { fileDiag = { path: keyFile, readError: String(e) }; }
+        console.error('smoke file diag:', fileDiag);
         console.error('smoke key diag:', {
           hasEnv: Boolean(process.env.NODES_JWT_PRIVATE_KEY),
           envLength: process.env.NODES_JWT_PRIVATE_KEY?.length ?? 0,
