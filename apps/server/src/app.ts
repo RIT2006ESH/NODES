@@ -806,6 +806,14 @@ export async function createGameServer(options: GameServerOptions = {}): Promise
         accessToken = issueSmokeToken(session.nodeId, team);
       } catch (err) {
         console.error('issueSmokeToken failed:', err);
+        console.error('smoke key diag:', {
+          hasEnv: Boolean(process.env.NODES_JWT_PRIVATE_KEY),
+          envLength: process.env.NODES_JWT_PRIVATE_KEY?.length ?? 0,
+          hasBegin: process.env.NODES_JWT_PRIVATE_KEY?.includes('BEGIN PRIVATE KEY') ?? false,
+          hasLiteralBackslashN: process.env.NODES_JWT_PRIVATE_KEY?.includes('\\n') ?? false,
+          hasRealNewline: process.env.NODES_JWT_PRIVATE_KEY?.includes('\n') ?? false,
+          hasFileVar: Boolean(process.env.NODES_JWT_PRIVATE_KEY_FILE),
+        });
         json(res, 503, { error: 'Smoke token issuer configuration is invalid' });
         return;
       }
