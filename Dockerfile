@@ -17,8 +17,9 @@ COPY packages packages
 COPY apps apps
 COPY tools tools
 
+ARG VITE_SMOKE_BASE_URL
+ENV VITE_SMOKE_BASE_URL=$VITE_SMOKE_BASE_URL
 RUN npm run build
-
 EXPOSE 10000
 ENV PORT=10000
 CMD ["npm", "start"]
